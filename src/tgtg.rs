@@ -1,7 +1,9 @@
+use core::fmt;
+
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyTuple};
+use serde::{Serialize, Deserialize};
 use tracing::info;
-use tracing::debug;
 
 use crate::{Coordinates, TGTGCredentials};
 
@@ -12,16 +14,17 @@ pub(crate) fn test_python() -> PyResult<()> {
         let locals = [("os", py.import("os")?)].into_py_dict(py);
         let code = "os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'";
         let user: String = py.eval(code, None, Some(locals))?.extract()?;
-        info!("Hello {}, I'm Python {}", user, version);
+        info!("OK! Running user: {}, Python version: {}", user, version);
         Ok(())
     })
 }
 
-fn get_items(tgtg_credentials: &TGTGCredentials , coords: &Coordinates) -> PyResult<String> {
+fn py_get_items(tgtg_credentials: &TGTGCredentials, coords: &Coordinates) -> PyResult<String> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             "from tgtg import TgtgClient
+import json
 def fetch_items(access_token, refresh_token, user_id, latitude, longitude):
     client = TgtgClient(access_token=access_token, refresh_token=refresh_token, user_id=user_id)
     items = client.get_items(
@@ -30,7 +33,7 @@ def fetch_items(access_token, refresh_token, user_id, latitude, longitude):
         longitude=longitude,
         radius=10,
     )
-    return str(items)",
+    return json.dumps(items)",
             "",
             "",
         )?
@@ -50,7 +53,64 @@ def fetch_items(access_token, refresh_token, user_id, latitude, longitude):
         );
         let ret = fun.call1(py, args)?;
         let items = ret.extract::<String>(py)?;
-        debug!("{}", items);
         Ok(items)
     })
+}
+
+pub fn get_items(
+    tgtg_credentials: &TGTGCredentials,
+    coords: &Coordinates,
+) -> anyhow::Result<Vec<TGTGListing>> {
+    let py_items = py_get_items(tgtg_credentials, coords)?;
+    let items: Vec<TGTGListing> = serde_json::from_str(&py_items)?;
+    Ok(items)
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TGTGListing {
+    pub item: Item,
+    pub store: Store,
+    pub display_name: String,
+    pub items_available: usize,
+    distance: f64,
+    favorite: bool,
+    in_sales_window: bool,
+    new_item: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Item {
+    pub item_id: String,
+    pub price_including_taxes: ItemPrice,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ItemPrice {
+    pub code: Currency,
+    pub minor_units: u32,
+    pub decimals : u32,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Currency {
+    EUR,
+    GBP,
+}
+
+impl fmt::Display for Currency {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Currency::EUR => write!(f, "EUR"),
+            Currency::GBP => write!(f, "GBP"),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Store {
+    store_id: String,
+    pub store_name: String,
+    pub logo_picture: Logo,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Logo {
+    picture_id: String,
+    pub current_url: String,
 }
