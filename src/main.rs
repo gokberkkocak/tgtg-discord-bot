@@ -82,7 +82,7 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(ping, register, quit)]
+#[commands(ping, monitor, quit)]
 struct General;
 
 #[tokio::main]
@@ -154,14 +154,14 @@ async fn main() {
     // Loop inform all channels
     let client_data = client.data.clone();
     let http = client.cache_and_http.http.clone();
-    iterate_channels(tgtg_credentials, client_data, http).await;
+    monitor_locations(tgtg_credentials, client_data, http).await;
 
     if let Err(why) = client.start().await {
         error!("Client error: {:?}", why);
     }
 }
 
-async fn iterate_channels(
+async fn monitor_locations(
     tgtg_credentials: Arc<TGTGCredentials>,
     client_data: Arc<RwLock<TypeMap>>,
     http: Arc<Http>,
@@ -174,19 +174,22 @@ async fn iterate_channels(
                 .expect("Could not get Location Map")
                 .read()
                 .await;
-            let item_map = client_data_rw
-                .get::<TGTGItemContainer>()
-                .expect("Could not get Item Map")
-                .read()
-                .await;
             for (channel, coords) in location_map.iter() {
                 let items =
                     tgtg::get_items(&tgtg_credentials, coords).expect("Could not get items");
                 for i in items {
                     //  Check if the item is available
                     if i.items_available > 0 {
+                        let item_map = client_data_rw
+                            .get::<TGTGItemContainer>()
+                            .expect("Could not get Item Map")
+                            .read()
+                            .await;
                         // Check if we already posted it. If yes update, no new message
-                        if let Some(msg_item) = item_map.get(&i.item.item_id) {
+                        let item_exists = item_map.get(&i.item.item_id).is_some();
+                        if item_exists {
+                            let msg_item = *item_map.get(&i.item.item_id).expect("Cannot get msg_item");
+                            drop(item_map);
                             // Update the message with the new quantity
                             if msg_item.quantity != i.items_available {
                                 channel
@@ -230,6 +233,7 @@ async fn iterate_channels(
                             }
                         } else {
                             // We have quantity available, post a new message
+                            drop(item_map);
                             let msg = channel
                                 .send_message(&http, |m| {
                                     m.embed(|e| {
@@ -255,12 +259,12 @@ async fn iterate_channels(
                                 })
                                 .await
                                 .expect("Could not send message");
-                            let mut item_map = client_data_rw
+                            let mut item_map_write = client_data_rw
                                 .get::<TGTGItemContainer>()
                                 .expect("Could not get Item Map")
                                 .write()
                                 .await;
-                            item_map.insert(
+                            item_map_write.insert(
                                 i.item.item_id,
                                 MessageWithItem {
                                     message_id: msg.id,
@@ -270,24 +274,31 @@ async fn iterate_channels(
                         }
                     } else {
                         // No quantity. Check we posted this item before, if yes delete
-                        if let Some(msg_item) = item_map.get(&i.item.item_id) {
+                        let item_map = client_data_rw
+                            .get::<TGTGItemContainer>()
+                            .expect("Could not get Item Map")
+                            .read()
+                            .await;
+                        let item_exists = item_map.get(&i.item.item_id).is_some();
+                        if item_exists {
+                            let msg_item = *item_map.get(&i.item.item_id).expect("Cannot get msgitem");
+                            drop(item_map);
                             channel
                                 .delete_message(&http, msg_item.message_id)
                                 .await
                                 .expect("Could not delete message");
-                            let mut item_map = client_data_rw
+                            let mut item_map_write = client_data_rw
                                 .get::<TGTGItemContainer>()
                                 .expect("Could not get Item Map")
                                 .write()
                                 .await;
-                            item_map.remove(&i.item.item_id);
+                            item_map_write.remove(&i.item.item_id);
                         }
                     }
                 }
             }
             // manually drop locks. we don't want to keep the lock during the sleeping period.
             drop(location_map);
-            drop(item_map);
             drop(client_data_rw);
             tokio::time::sleep(Duration::from_secs(45)).await;
         }

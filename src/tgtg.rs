@@ -14,7 +14,7 @@ pub(crate) fn test_python() -> PyResult<()> {
         let locals = [("os", py.import("os")?)].into_py_dict(py);
         let code = "os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'";
         let user: String = py.eval(code, None, Some(locals))?.extract()?;
-        info!("OK! Running user: {}, Python version: {}", user, version);
+        info!("Python status OK! Running user: {}, Python version: {}", user, version);
         Ok(())
     })
 }
@@ -31,6 +31,7 @@ def fetch_items(access_token, refresh_token, user_id, latitude, longitude):
         favorites_only=False,
         latitude=latitude,
         longitude=longitude,
+        page_size=100,
         radius=10,
     )
     return json.dumps(items)",
@@ -90,15 +91,17 @@ pub struct ItemPrice {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Currency {
-    EUR,
-    GBP,
+    #[serde(rename = "EUR")]
+    Eur,
+    #[serde(rename = "GBP")]
+    Gbp,
 }
 
 impl fmt::Display for Currency {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Currency::EUR => write!(f, "EUR"),
-            Currency::GBP => write!(f, "GBP"),
+            Currency::Eur => write!(f, "EUR"),
+            Currency::Gbp => write!(f, "GBP"),
         }
     }
 }
