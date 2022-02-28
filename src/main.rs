@@ -46,7 +46,7 @@ impl TypeMapKey for TGTGLocationContainer {
 }
 
 #[derive(Clone, Copy)]
-pub struct MessageWithItem {
+pub struct ItemMessage {
     pub message_id: MessageId,
     pub quantity: usize,
 }
@@ -54,7 +54,7 @@ pub struct MessageWithItem {
 pub struct TGTGItemContainer;
 
 impl TypeMapKey for TGTGItemContainer {
-    type Value = Arc<RwLock<HashMap<String, MessageWithItem>>>;
+    type Value = Arc<RwLock<HashMap<String, ItemMessage>>>;
 }
 
 pub struct Coordinates {
@@ -87,14 +87,10 @@ struct General;
 
 #[tokio::main]
 async fn main() {
-    // This will load the environment variables located at `./.env`, relative to
-    // the CWD. See `./.env.example` for an example on how to structure this.
-    dotenv::dotenv().expect("Failed to load .env file");
-
+    // Load .env variables if it exists.
+    dotenv::dotenv().ok();
+    
     // Initialize the logger to use environment variables.
-    //
-    // In this case, a good default is setting the environment variable
-    // `RUST_LOG` to `debug`.
     tracing_subscriber::fmt::init();
 
     let discord_token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
@@ -178,22 +174,21 @@ async fn monitor_locations(
                 let items =
                     tgtg::get_items(&tgtg_credentials, coords).expect("Could not get items");
                 for i in items {
+                    let item_message = {
+                        let item_map = client_data_rw
+                        .get::<TGTGItemContainer>()
+                        .expect("Could not get Item Map")
+                        .read()
+                        .await;
+                        item_map.get(&i.item.item_id).copied()
+                    };
                     //  Check if the item is available
                     if i.items_available > 0 {
-                        let item_map = client_data_rw
-                            .get::<TGTGItemContainer>()
-                            .expect("Could not get Item Map")
-                            .read()
-                            .await;
-                        // Check if we already posted it. If yes update, no new message
-                        let item_exists = item_map.get(&i.item.item_id).is_some();
-                        if item_exists {
-                            let msg_item = *item_map.get(&i.item.item_id).expect("Cannot get msg_item");
-                            drop(item_map);
+                        if let Some(item_message) = item_message {
                             // Update the message with the new quantity
-                            if msg_item.quantity != i.items_available {
+                            if item_message.quantity != i.items_available {
                                 channel
-                                    .edit_message(&http, msg_item.message_id, |m| {
+                                    .edit_message(&http, item_message.message_id, |m| {
                                         m.embed(|e| {
                                             e.title(i.store.store_name);
                                             e.description(i.display_name);
@@ -225,15 +220,14 @@ async fn monitor_locations(
                                     .await;
                                 item_map.insert(
                                     i.item.item_id,
-                                    MessageWithItem {
-                                        message_id: msg_item.message_id,
+                                    ItemMessage {
+                                        message_id: item_message.message_id,
                                         quantity: i.items_available,
                                     },
                                 );
                             }
                         } else {
                             // We have quantity available, post a new message
-                            drop(item_map);
                             let msg = channel
                                 .send_message(&http, |m| {
                                     m.embed(|e| {
@@ -266,7 +260,7 @@ async fn monitor_locations(
                                 .await;
                             item_map_write.insert(
                                 i.item.item_id,
-                                MessageWithItem {
+                                ItemMessage {
                                     message_id: msg.id,
                                     quantity: i.items_available,
                                 },
@@ -274,17 +268,9 @@ async fn monitor_locations(
                         }
                     } else {
                         // No quantity. Check we posted this item before, if yes delete
-                        let item_map = client_data_rw
-                            .get::<TGTGItemContainer>()
-                            .expect("Could not get Item Map")
-                            .read()
-                            .await;
-                        let item_exists = item_map.get(&i.item.item_id).is_some();
-                        if item_exists {
-                            let msg_item = *item_map.get(&i.item.item_id).expect("Cannot get msgitem");
-                            drop(item_map);
+                        if let Some(item_message) = item_message {
                             channel
-                                .delete_message(&http, msg_item.message_id)
+                                .delete_message(&http, item_message.message_id)
                                 .await
                                 .expect("Could not delete message");
                             let mut item_map_write = client_data_rw
