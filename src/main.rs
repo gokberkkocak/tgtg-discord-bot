@@ -10,6 +10,7 @@
 //! ```
 mod commands;
 mod tgtg;
+mod monitor;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -56,7 +57,7 @@ pub struct TGTGItemContainer;
 impl TypeMapKey for TGTGItemContainer {
     type Value = Arc<RwLock<HashMap<String, ItemMessage>>>;
 }
-
+#[derive(Copy, Clone)]
 pub struct Coordinates {
     latitude: f64,
     longitude: f64,
