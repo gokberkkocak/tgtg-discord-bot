@@ -6,7 +6,6 @@ use tracing::info;
 
 use crate::{Coordinates, ShardManagerContainer, TGTGLocationContainer};
 
-static OPENSTREETMAP_LINK_TEMPLATE: &str = "https://www.openstreetmap.org/#map={}/{}/{}";
 static ZOOM_LEVEL: u8 = 15;
 
 #[command]
@@ -34,13 +33,13 @@ async fn monitor(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             "Monitor started ({}, {}) for channel {}",
             latitude, longitude, msg.channel_id
         );
-        msg.channel_id..send_message(&http, |m| {
+        msg.channel_id.send_message(&ctx.http, |m| {
             m.embed(|e| {
                 e.title("Monitoring started");
                 e.field("Latitude", format!("{:.4}", latitude), true);
                 e.field("Longitude", format!("{:.4}", longitude), true);
                 e.url(format!(
-                    OPENSTREETMAP_LINK_TEMPLATE,
+                    "https://www.openstreetmap.org/#map={}/{}/{}",
                     ZOOM_LEVEL, latitude, longitude
                 ));
                 e

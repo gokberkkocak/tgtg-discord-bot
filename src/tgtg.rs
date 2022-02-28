@@ -1,5 +1,3 @@
-use core::fmt;
-
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyTuple};
 use serde::{Deserialize, Serialize};
