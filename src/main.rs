@@ -89,7 +89,7 @@ struct General;
 async fn main() {
     // Load .env variables if it exists.
     dotenv::dotenv().ok();
-    
+
     // Initialize the logger to use environment variables.
     tracing_subscriber::fmt::init();
 
@@ -176,10 +176,10 @@ async fn monitor_locations(
                 for i in items {
                     let item_message = {
                         let item_map = client_data_rw
-                        .get::<TGTGItemContainer>()
-                        .expect("Could not get Item Map")
-                        .read()
-                        .await;
+                            .get::<TGTGItemContainer>()
+                            .expect("Could not get Item Map")
+                            .read()
+                            .await;
                         item_map.get(&i.item.item_id).copied()
                     };
                     //  Check if the item is available

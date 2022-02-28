@@ -2,7 +2,7 @@ use core::fmt;
 
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyTuple};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{Coordinates, TGTGCredentials};
@@ -14,7 +14,10 @@ pub(crate) fn test_python() -> PyResult<()> {
         let locals = [("os", py.import("os")?)].into_py_dict(py);
         let code = "os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'";
         let user: String = py.eval(code, None, Some(locals))?.extract()?;
-        info!("Python status OK! Running user: {}, Python version: {}", user, version);
+        info!(
+            "Python status OK! Running user: {}, Python version: {}",
+            user, version
+        );
         Ok(())
     })
 }
@@ -87,7 +90,7 @@ pub struct Item {
 pub struct ItemPrice {
     pub code: Currency,
     pub minor_units: u32,
-    pub decimals : u32,
+    pub decimals: u32,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Currency {
