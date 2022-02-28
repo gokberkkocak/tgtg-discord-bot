@@ -88,25 +88,9 @@ pub struct Item {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ItemPrice {
-    pub code: Currency,
+    pub code: String,
     pub minor_units: u32,
     pub decimals: u32,
-}
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Currency {
-    #[serde(rename = "EUR")]
-    Eur,
-    #[serde(rename = "GBP")]
-    Gbp,
-}
-
-impl fmt::Display for Currency {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Currency::Eur => write!(f, "EUR"),
-            Currency::Gbp => write!(f, "GBP"),
-        }
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
