@@ -1,6 +1,7 @@
 mod commands;
-mod tgtg;
+mod db;
 mod monitor;
+mod tgtg;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -41,16 +42,16 @@ pub struct ItemMessage {
     pub quantity: usize,
 }
 
-pub struct TGTGItemContainer;
+pub struct TGTGItemMessageContainer;
 
-impl TypeMapKey for TGTGItemContainer {
+impl TypeMapKey for TGTGItemMessageContainer {
     type Value = Arc<RwLock<HashMap<String, ItemMessage>>>;
 }
 #[derive(Copy, Clone)]
 pub struct CoordinatesWithRadius {
     latitude: f64,
     longitude: f64,
-    radius: u64,
+    radius: u8,
 }
 #[derive(Debug)]
 pub struct TGTGCredentials {
@@ -71,6 +72,12 @@ impl TypeMapKey for TGTGActiveChannelsContainer {
     type Value = Arc<RwLock<HashSet<ChannelId>>>;
 }
 
+pub struct BotDBContainer;
+
+impl TypeMapKey for BotDBContainer {
+    type Value = Arc<db::BotDB>;
+}
+
 struct Handler;
 
 #[async_trait]
@@ -89,24 +96,25 @@ impl EventHandler for Handler {
 struct General;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     // Load .env variables if it exists.
     dotenv::dotenv().ok();
 
     // Initialize the logger to use environment variables.
     tracing_subscriber::fmt::init();
 
-    let discord_token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-    let tgtg_access_token =
-        env::var("TGTG_ACCESS_TOKEN").expect("Expected a token in the environment");
-    let tgtg_refresh_token =
-        env::var("TGTG_REFRESH_TOKEN").expect("Expected a token in the environment");
-    let tgtg_user_token = env::var("TGTG_USER_ID").expect("Expected a token in the environment");
+    let discord_token = env::var("DISCORD_TOKEN")?;
+    let tgtg_access_token = env::var("TGTG_ACCESS_TOKEN")?;
+    let tgtg_refresh_token = env::var("TGTG_REFRESH_TOKEN")?;
+    let tgtg_user_token = env::var("TGTG_USER_ID")?;
+    let db_url = env::var("DATABASE_URL")?;
     let tgtg_credentials = Arc::new(TGTGCredentials {
         access_token: tgtg_access_token,
         refresh_token: tgtg_refresh_token,
         user_id: tgtg_user_token,
     });
+
+    tgtg::test_python()?;
 
     let http = Http::new_with_token(&discord_token);
 
@@ -118,8 +126,17 @@ async fn main() {
 
             (owners, info.id)
         }
-        Err(why) => panic!("Could not access application info: {:?}", why),
+        Err(why) => {
+            return Err(anyhow::anyhow!(
+                "Could not access application info: {:?}",
+                why
+            ));
+        }
     };
+
+    // Bot DB
+    let bot_db = Arc::new(db::BotDB::new(&db_url).await?);
+    let (location_map, active_set) = bot_db.get_locations().await?;
 
     // Create the framework
     let framework = StandardFramework::new()
@@ -129,16 +146,15 @@ async fn main() {
     let mut client = Client::builder(&discord_token)
         .framework(framework)
         .event_handler(Handler)
-        .await
-        .expect("Err creating client");
-
+        .await?;
     {
         let mut data = client.data.write().await;
         data.insert::<ShardManagerContainer>(client.shard_manager.clone());
-        data.insert::<TGTGLocationContainer>(Arc::new(RwLock::new(HashMap::new())));
-        data.insert::<TGTGItemContainer>(Arc::new(RwLock::new(HashMap::new())));
+        data.insert::<TGTGLocationContainer>(Arc::new(RwLock::new(location_map)));
+        data.insert::<TGTGActiveChannelsContainer>(Arc::new(RwLock::new(active_set)));
+        data.insert::<TGTGItemMessageContainer>(Arc::new(RwLock::new(HashMap::new())));
         data.insert::<TGTGCredentialsContainer>(tgtg_credentials.clone());
-        data.insert::<TGTGActiveChannelsContainer>(Arc::new(RwLock::new(HashSet::new())));
+        data.insert::<BotDBContainer>(bot_db);
     }
 
     let shard_manager = client.shard_manager.clone();
@@ -150,14 +166,8 @@ async fn main() {
         shard_manager.lock().await.shutdown_all().await;
     });
 
-    tgtg::test_python().expect("python environment error");
-
-    // Loop inform all channels
-    // let client_data = client.data.clone();
-    // let http = client.cache_and_http.http.clone();
-    // crate::monitor::monitor_locations(tgtg_credentials, client_data, http).await;
-
     if let Err(why) = client.start().await {
         error!("Client error: {:?}", why);
     }
+    Ok(())
 }

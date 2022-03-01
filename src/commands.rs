@@ -5,12 +5,12 @@ use serenity::prelude::*;
 use tracing::info;
 
 use crate::{
-    CoordinatesWithRadius, ShardManagerContainer, TGTGActiveChannelsContainer,
+    BotDBContainer, CoordinatesWithRadius, ShardManagerContainer, TGTGActiveChannelsContainer,
     TGTGLocationContainer,
 };
 
 static OSM_ZOOM_LEVEL: u8 = 15;
-static DEFAULT_RADIUS: u64 = 3;
+static DEFAULT_RADIUS: u8 = 3;
 static RADIUS_UNIT: &str = "km";
 
 #[command]
@@ -27,14 +27,12 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     if let Some(location_map) = data.get::<TGTGLocationContainer>() {
         let latitude = args.single::<f64>()?;
         let longitude = args.single::<f64>()?;
-        location_map.write().await.insert(
-            msg.channel_id,
-            CoordinatesWithRadius {
-                latitude,
-                longitude,
-                radius: DEFAULT_RADIUS,
-            },
-        );
+        let coords = CoordinatesWithRadius {
+            latitude,
+            longitude,
+            radius: DEFAULT_RADIUS,
+        };
+        location_map.write().await.insert(msg.channel_id, coords);
         info!(
             "Location set as ({}, {}) for channel {}",
             latitude, longitude, msg.channel_id
@@ -46,7 +44,11 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                     e.description("TooGoodToGo location is set for this channel");
                     e.field("Latitude", format!("{:.4}", latitude), true);
                     e.field("Longitude", format!("{:.4}", longitude), true);
-                    e.field("Radius", format!("{} {}", DEFAULT_RADIUS, RADIUS_UNIT), true);
+                    e.field(
+                        "Radius",
+                        format!("{} {}", DEFAULT_RADIUS, RADIUS_UNIT),
+                        true,
+                    );
                     e.url(format!(
                         "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
                         OSM_ZOOM_LEVEL, latitude, longitude
@@ -56,10 +58,12 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 m
             })
             .await?;
+        if let Some(bot_db) = data.get::<BotDBContainer>() {
+            bot_db.set_location(msg.channel_id, coords).await?;
+        }
     } else {
         msg.reply(ctx, "There was a problem registering the location")
             .await?;
-        return Ok(());
     }
     Ok(())
 }
@@ -69,27 +73,38 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let data = ctx.data.write().await;
     if let Some(location_map) = data.get::<TGTGLocationContainer>() {
-        let radius = args.single::<u64>()?;
+        let radius = args.single::<u8>()?;
         if let Some(location) = location_map.write().await.get_mut(&msg.channel_id) {
             location.radius = radius;
-            info!("Radius set as {} for channel {}", radius, msg.channel_id);
-            msg.channel_id
-                .send_message(&ctx.http, |m| {
-                    m.embed(|e| {
-                        e.title("Radius");
-                        e.description("TooGoodToGo radius is set for this channel");
-                        e.field("Latitude", format!("{:.4}", location.latitude), true);
-                        e.field("Longitude", format!("{:.4}", location.longitude), true);
-                        e.field("Radius", format!("{} {}", radius, RADIUS_UNIT), true);
-                        e.url(format!(
-                            "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-                            OSM_ZOOM_LEVEL, location.latitude, location.longitude
-                        ));
-                        e
-                    });
-                    m
-                })
-                .await?;
+            if let Some(bot_db) = data.get::<BotDBContainer>() {
+                let new_coords = CoordinatesWithRadius {
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    radius,
+                };
+                bot_db.set_location(msg.channel_id, new_coords).await?;
+                info!("Radius set as {} for channel {}", radius, msg.channel_id);
+                msg.channel_id
+                    .send_message(&ctx.http, |m| {
+                        m.embed(|e| {
+                            e.title("Radius");
+                            e.description("TooGoodToGo radius is set for this channel");
+                            e.field("Latitude", format!("{:.4}", location.latitude), true);
+                            e.field("Longitude", format!("{:.4}", location.longitude), true);
+                            e.field("Radius", format!("{} {}", radius, RADIUS_UNIT), true);
+                            e.url(format!(
+                                "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                                OSM_ZOOM_LEVEL, location.latitude, location.longitude
+                            ));
+                            e
+                        });
+                        m
+                    })
+                    .await?;
+            } else {
+                msg.reply(ctx, "There was a problem registering the location")
+                    .await?;
+            }
         } else {
             msg.reply(
                 ctx,
@@ -131,7 +146,11 @@ async fn status(ctx: &Context, msg: &Message) -> CommandResult {
                         e.description("TooGoodToGo monitor status");
                         e.field("Latitude", format!("{:.4}", location.latitude), true);
                         e.field("Longitude", format!("{:.4}", location.longitude), true);
-                        e.field("Radius", format!("{} {}", location.radius, RADIUS_UNIT), true);
+                        e.field(
+                            "Radius",
+                            format!("{} {}", location.radius, RADIUS_UNIT),
+                            true,
+                        );
                         e.field("Active", if is_active { "✅" } else { "❌" }, true);
                         e.url(format!(
                             "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
@@ -177,15 +196,24 @@ async fn start(ctx: &Context, msg: &Message) -> CommandResult {
         if let Some(active_channels) = data.get::<TGTGActiveChannelsContainer>() {
             let mut active_channels = active_channels.write().await;
             active_channels.insert(msg.channel_id);
-            true
+            if let Some(bot_db) = data.get::<BotDBContainer>() {
+                bot_db.change_active(msg.channel_id, true).await?;
+                true
+            } else {
+                msg.reply(ctx, "There was a problem with starting monitoring (db)")
+                    .await?;
+                false
+            }
         } else {
-            msg.reply(ctx, "There was a problem with starting monitoring")
-                .await?;
+            msg.reply(
+                ctx,
+                "There was a problem with starting monitoring (active channel set)",
+            )
+            .await?;
             false
         }
     };
     if let Some(coords) = coords.filter(|_| insert_success) {
-        info!("Monitor started for channel {}", msg.channel_id);
         crate::monitor::monitor_location(
             ctx.data.clone(),
             ctx.http.clone(),
@@ -194,6 +222,7 @@ async fn start(ctx: &Context, msg: &Message) -> CommandResult {
         )
         .await;
         msg.react(ctx, '👍').await?;
+        info!("Monitor started for channel {}", msg.channel_id);
     }
     Ok(())
 }
@@ -202,10 +231,17 @@ async fn start(ctx: &Context, msg: &Message) -> CommandResult {
 async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
     let data = ctx.data.write().await;
     if let Some(active_channels) = data.get::<TGTGActiveChannelsContainer>() {
-        info!("Monitor stopped for channel {}", msg.channel_id);
+
         let mut active_channels = active_channels.write().await;
         active_channels.remove(&msg.channel_id);
-        msg.react(ctx, '👍').await?;
+        if let Some(bot_db) = data.get::<BotDBContainer>() {
+            bot_db.change_active(msg.channel_id, false).await?;
+            msg.react(ctx, '👍').await?;
+            info!("Monitor stopped for channel {}", msg.channel_id);
+        } else {
+            msg.reply(ctx, "There was a problem with starting monitoring (db)")
+                .await?;
+        }
     } else {
         msg.reply(ctx, "There was a problem with stopping monitoring")
             .await?;
@@ -223,8 +259,6 @@ async fn quit(ctx: &Context, msg: &Message) -> CommandResult {
     } else {
         msg.reply(ctx, "There was a problem getting the shard manager")
             .await?;
-        return Ok(());
     }
-
     Ok(())
 }

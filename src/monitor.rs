@@ -7,7 +7,7 @@ use tracing::debug;
 use tracing::info;
 
 use crate::TGTGActiveChannelsContainer;
-use crate::{CoordinatesWithRadius, ItemMessage, TGTGCredentialsContainer, TGTGItemContainer};
+use crate::{CoordinatesWithRadius, ItemMessage, TGTGCredentialsContainer, TGTGItemMessageContainer};
 
 const MONITOR_INTERVAL: u64 = 60;
 
@@ -51,7 +51,7 @@ pub async fn monitor_location(
                 );
                 let item_message = {
                     let item_map = client_data_rw
-                        .get::<TGTGItemContainer>()
+                        .get::<TGTGItemMessageContainer>()
                         .expect("Could not get Item Map")
                         .read()
                         .await;
@@ -88,7 +88,7 @@ pub async fn monitor_location(
                                 .await
                                 .expect("Could not edit message");
                             let mut item_map = client_data_rw
-                                .get::<TGTGItemContainer>()
+                                .get::<TGTGItemMessageContainer>()
                                 .expect("Could not get Item Map")
                                 .write()
                                 .await;
@@ -127,7 +127,7 @@ pub async fn monitor_location(
                             .await
                             .expect("Could not send message");
                         let mut item_map_write = client_data_rw
-                            .get::<TGTGItemContainer>()
+                            .get::<TGTGItemMessageContainer>()
                             .expect("Could not get Item Map")
                             .write()
                             .await;
@@ -147,7 +147,7 @@ pub async fn monitor_location(
                             .await
                             .expect("Could not delete message");
                         let mut item_map_write = client_data_rw
-                            .get::<TGTGItemContainer>()
+                            .get::<TGTGItemMessageContainer>()
                             .expect("Could not get Item Map")
                             .write()
                             .await;
