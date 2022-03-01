@@ -32,7 +32,7 @@ impl TypeMapKey for ShardManagerContainer {
 pub struct TGTGLocationContainer;
 
 impl TypeMapKey for TGTGLocationContainer {
-    type Value = Arc<RwLock<HashMap<ChannelId, Coordinates>>>;
+    type Value = Arc<RwLock<HashMap<ChannelId, CoordinatesWithRadius>>>;
 }
 
 #[derive(Clone, Copy)]
@@ -47,9 +47,10 @@ impl TypeMapKey for TGTGItemContainer {
     type Value = Arc<RwLock<HashMap<String, ItemMessage>>>;
 }
 #[derive(Copy, Clone)]
-pub struct Coordinates {
+pub struct CoordinatesWithRadius {
     latitude: f64,
     longitude: f64,
+    radius: u64,
 }
 #[derive(Debug)]
 pub struct TGTGCredentials {
@@ -84,7 +85,7 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(ping, set, start, stop, quit)]
+#[commands(ping, location, radius, status, start, stop, quit)]
 struct General;
 
 #[tokio::main]

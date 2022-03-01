@@ -1,20 +1,21 @@
 use serenity::prelude::RwLock;
 use serenity::prelude::TypeMap;
 use serenity::{http::Http, model::id::ChannelId};
-use tracing::info;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::debug;
+use tracing::info;
 
 use crate::TGTGActiveChannelsContainer;
-use crate::{
-    Coordinates, ItemMessage, TGTGCredentialsContainer, TGTGItemContainer,
-};
+use crate::{CoordinatesWithRadius, ItemMessage, TGTGCredentialsContainer, TGTGItemContainer};
+
+const MONITOR_INTERVAL: u64 = 60;
 
 pub async fn monitor_location(
     client_data: Arc<RwLock<TypeMap>>,
     http: Arc<Http>,
     channel_id: ChannelId,
-    coords: Coordinates,
+    coords: CoordinatesWithRadius,
 ) {
     let tgtg_credentials = {
         let client_data = client_data.read().await;
@@ -42,7 +43,12 @@ pub async fn monitor_location(
             let client_data_rw = client_data.write().await;
             let items =
                 crate::tgtg::get_items(&tgtg_credentials, &coords).expect("Could not get items");
+            debug!("Channel {}: Monitor found {} items", channel_id, items.len());
             for i in items {
+                debug!(
+                    "Channel {}: Item: {} with quantity {}",
+                    channel_id, i.display_name, i.items_available
+                );
                 let item_message = {
                     let item_map = client_data_rw
                         .get::<TGTGItemContainer>()
@@ -151,7 +157,7 @@ pub async fn monitor_location(
             }
             // manually drop lock. we don't want to keep the lock during the sleeping period.
             drop(client_data_rw);
-            tokio::time::sleep(Duration::from_secs(45)).await;
+            tokio::time::sleep(Duration::from_secs(MONITOR_INTERVAL)).await;
         }
         info!("Thread terminated for monitoring location");
     });

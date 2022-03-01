@@ -5,10 +5,12 @@ use serenity::prelude::*;
 use tracing::info;
 
 use crate::{
-    Coordinates, ShardManagerContainer, TGTGActiveChannelsContainer, TGTGLocationContainer,
+    CoordinatesWithRadius, ShardManagerContainer, TGTGActiveChannelsContainer,
+    TGTGLocationContainer,
 };
 
 static ZOOM_LEVEL: u8 = 15;
+static DEFAULT_RADIUS: u64 = 3;
 
 #[command]
 async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
@@ -19,16 +21,17 @@ async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 #[num_args(2)]
-async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let data = ctx.data.write().await;
     if let Some(location_map) = data.get::<TGTGLocationContainer>() {
         let latitude = args.single::<f64>()?;
         let longitude = args.single::<f64>()?;
         location_map.write().await.insert(
             msg.channel_id,
-            Coordinates {
+            CoordinatesWithRadius {
                 latitude,
                 longitude,
+                radius: DEFAULT_RADIUS,
             },
         );
         info!(
@@ -39,7 +42,7 @@ async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
             .send_message(&ctx.http, |m| {
                 m.embed(|e| {
                     e.title("Location");
-                    e.description("TooGoodToGo location set");
+                    e.description("TooGoodToGo location is set for this channel");
                     e.field("Latitude", format!("{:.4}", latitude), true);
                     e.field("Longitude", format!("{:.4}", longitude), true);
                     e.url(format!(
@@ -55,6 +58,91 @@ async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         msg.reply(ctx, "There was a problem registering the location")
             .await?;
         return Ok(());
+    }
+    Ok(())
+}
+
+#[command]
+#[num_args(1)]
+async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let data = ctx.data.write().await;
+    if let Some(location_map) = data.get::<TGTGLocationContainer>() {
+        let radius = args.single::<u64>()?;
+        if let Some(location) = location_map.write().await.get_mut(&msg.channel_id) {
+            location.radius = radius;
+            info!("Radius set as {} for channel {}", radius, msg.channel_id);
+            msg.channel_id
+                .send_message(&ctx.http, |m| {
+                    m.embed(|e| {
+                        e.title("Radius");
+                        e.description("TooGoodToGo radius is set for this channel");
+                        e.field("Radius", format!("{}", radius), true);
+                        e
+                    });
+                    m
+                })
+                .await?;
+        } else {
+            msg.reply(
+                ctx,
+                "There was a problem registering the radius (retriving the location)",
+            )
+            .await?;
+        }
+    } else {
+        msg.reply(
+            ctx,
+            "There was a problem registering the radius (retrieving the client data)",
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+#[command]
+async fn status(ctx: &Context, msg: &Message) -> CommandResult {
+    let data = ctx.data.read().await;
+    let is_active = {
+        if let Some(active_channels) = data.get::<TGTGActiveChannelsContainer>() {
+            active_channels.read().await.contains(&msg.channel_id)
+        } else {
+            msg.reply(
+                ctx,
+                "There was a problem registering the radius (retriving the active message)",
+            )
+            .await?;
+            false
+        }
+    };
+    if let Some(location_map) = data.get::<TGTGLocationContainer>() {
+        if let Some(location) = location_map.read().await.get(&msg.channel_id) {
+            msg.channel_id
+                .send_message(&ctx.http, |m| {
+                    m.embed(|e| {
+                        e.title("Status");
+                        e.description("TooGoodToGo status");
+                        e.field("Latitude", format!("{:.4}", location.latitude), true);
+                        e.field("Longitude", format!("{:.4}", location.longitude), true);
+                        e.field("Radius", format!("{}", location.radius), true);
+                        e.field("Active", if is_active { "✅" } else { "❌" }, true);
+                        e
+                    });
+                    m
+                })
+                .await?;
+        } else {
+            msg.reply(
+                ctx,
+                "There was a problem registering the radius (retriving the location)",
+            )
+            .await?;
+        }
+    } else {
+        msg.reply(
+            ctx,
+            "There was a problem registering the radius (retrieving the client data)",
+        )
+        .await?;
     }
     Ok(())
 }

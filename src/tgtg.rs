@@ -3,7 +3,7 @@ use pyo3::types::{IntoPyDict, PyTuple};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::{Coordinates, TGTGCredentials};
+use crate::{CoordinatesWithRadius, TGTGCredentials};
 
 pub(crate) fn test_python() -> PyResult<()> {
     Python::with_gil(|py| {
@@ -20,20 +20,20 @@ pub(crate) fn test_python() -> PyResult<()> {
     })
 }
 
-fn py_get_items(tgtg_credentials: &TGTGCredentials, coords: &Coordinates) -> PyResult<String> {
+fn py_get_items(tgtg_credentials: &TGTGCredentials, coords: &CoordinatesWithRadius) -> PyResult<String> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             "from tgtg import TgtgClient
 import json
-def fetch_items(access_token, refresh_token, user_id, latitude, longitude):
+def fetch_items(access_token, refresh_token, user_id, latitude, longitude, radius):
     client = TgtgClient(access_token=access_token, refresh_token=refresh_token, user_id=user_id)
     items = client.get_items(
         favorites_only=False,
         latitude=latitude,
         longitude=longitude,
         page_size=100,
-        radius=10,
+        radius=radius,
     )
     return json.dumps(items)",
             "",
@@ -51,6 +51,7 @@ def fetch_items(access_token, refresh_token, user_id, latitude, longitude):
                 &tgtg_credentials.user_id,
                 &format!("{:.5}", coords.latitude),
                 &format!("{:.5}", coords.longitude),
+                &format!("{}", coords.radius),
             ],
         );
         let ret = fun.call1(py, args)?;
@@ -61,7 +62,7 @@ def fetch_items(access_token, refresh_token, user_id, latitude, longitude):
 
 pub fn get_items(
     tgtg_credentials: &TGTGCredentials,
-    coords: &Coordinates,
+    coords: &CoordinatesWithRadius,
 ) -> anyhow::Result<Vec<TGTGListing>> {
     let py_items = py_get_items(tgtg_credentials, coords)?;
     let items: Vec<TGTGListing> = serde_json::from_str(&py_items)?;
