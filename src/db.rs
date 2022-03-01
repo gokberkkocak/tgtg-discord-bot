@@ -1,4 +1,7 @@
-use std::{collections::{HashMap, HashSet}, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 use anyhow::Result;
 use serenity::model::id::ChannelId;
@@ -97,7 +100,7 @@ impl BotDB {
         HashMap<ChannelId, CoordinatesWithRadius>,
         HashSet<ChannelId>,
     )> {
-        let mut conn = self.pool.acquire().await.unwrap();
+        let mut conn = self.pool.acquire().await?;
         let records = sqlx::query!(
             r#"
                 SELECT channel_id, latitude, longitude, radius, active FROM channels
@@ -108,7 +111,7 @@ impl BotDB {
         let location_map = records
             .iter()
             .map(|r| {
-                let channel_id = ChannelId::from_str(&r.channel_id).unwrap();
+                let channel_id = ChannelId::from_str(&r.channel_id).expect("Invalid channel id");
                 (
                     channel_id,
                     CoordinatesWithRadius {
@@ -119,14 +122,17 @@ impl BotDB {
                 )
             })
             .collect();
-        let active_set = records.iter().filter_map(|r| {
-            if r.active == 1 {
-                let channel_id = ChannelId::from_str(&r.channel_id).unwrap();
-                Some(channel_id)
-            } else {
-                None
-            }
-        }).collect();
+        let active_set = records
+            .iter()
+            .filter_map(|r| {
+                if r.active == 1 {
+                    let channel_id = ChannelId::from_str(&r.channel_id).expect("Invalid channel id");
+                    Some(channel_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
         Ok((location_map, active_set))
     }
 }

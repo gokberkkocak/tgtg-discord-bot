@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyTuple};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tracing::info;
 
 use crate::{CoordinatesWithRadius, TGTGCredentials};
@@ -20,7 +20,10 @@ pub(crate) fn test_python() -> PyResult<()> {
     })
 }
 
-fn py_get_items(tgtg_credentials: &TGTGCredentials, coords: &CoordinatesWithRadius) -> PyResult<String> {
+fn py_get_items(
+    tgtg_credentials: &TGTGCredentials,
+    coords: &CoordinatesWithRadius,
+) -> PyResult<String> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
@@ -68,38 +71,33 @@ pub fn get_items(
     let items: Vec<TGTGListing> = serde_json::from_str(&py_items)?;
     Ok(items)
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct TGTGListing {
     pub item: Item,
     pub store: Store,
     pub display_name: String,
     pub items_available: usize,
-    distance: f64,
-    favorite: bool,
-    in_sales_window: bool,
-    new_item: bool,
+    pub distance: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Item {
     pub item_id: String,
     pub price_including_taxes: ItemPrice,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ItemPrice {
     pub code: String,
     pub minor_units: u32,
     pub decimals: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Store {
-    store_id: String,
     pub store_name: String,
     pub logo_picture: Logo,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Logo {
-    picture_id: String,
     pub current_url: String,
 }

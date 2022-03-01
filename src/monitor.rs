@@ -6,7 +6,10 @@ use std::time::Duration;
 use tracing::info;
 
 use crate::TGTGActiveChannelsContainer;
-use crate::{CoordinatesWithRadius, ItemMessage, TGTGCredentialsContainer, TGTGItemMessageContainer};
+use crate::RADIUS_UNIT;
+use crate::{
+    CoordinatesWithRadius, ItemMessage, TGTGCredentialsContainer, TGTGItemMessageContainer,
+};
 
 const MONITOR_INTERVAL: u64 = 60;
 
@@ -42,7 +45,11 @@ pub async fn monitor_location(
             let client_data_rw = client_data.write().await;
             let items =
                 crate::tgtg::get_items(&tgtg_credentials, &coords).expect("Could not get items");
-            info!("Channel {}: Monitor found {} items", channel_id, items.len());
+            info!(
+                "Channel {}: Monitor found {} items",
+                channel_id,
+                items.len()
+            );
             for i in items {
                 info!(
                     "Channel {}: Item {} with quantity {}",
@@ -79,6 +86,11 @@ pub async fn monitor_location(
                                             true,
                                         );
                                         e.field("Quantity", i.items_available, true);
+                                        e.field(
+                                            "Distance",
+                                            format!("{:.2} {}", i.distance, RADIUS_UNIT),
+                                            true,
+                                        );
                                         e.image(i.store.logo_picture.current_url);
                                         e
                                     });
@@ -118,6 +130,11 @@ pub async fn monitor_location(
                                         true,
                                     );
                                     e.field("Quantity", i.items_available, true);
+                                    e.field(
+                                        "Distance",
+                                        format!("{:.2} {}", i.distance, RADIUS_UNIT),
+                                        true,
+                                    );
                                     e.image(i.store.logo_picture.current_url);
                                     e
                                 });
@@ -158,6 +175,9 @@ pub async fn monitor_location(
             drop(client_data_rw);
             tokio::time::sleep(Duration::from_secs(MONITOR_INTERVAL)).await;
         }
-        info!("Channel {}: Thread terminated for monitoring location", channel_id);
+        info!(
+            "Channel {}: Thread terminated for monitoring location",
+            channel_id
+        );
     });
 }

@@ -25,6 +25,8 @@ use serenity::{
 };
 use tracing::{error, info};
 
+static RADIUS_UNIT: &str = "km";
+
 pub struct ShardManagerContainer;
 
 impl TypeMapKey for ShardManagerContainer {
@@ -178,7 +180,7 @@ async fn main() -> anyhow::Result<()> {
         for (channel_id, coords) in location_map_rw.read().await.iter() {
             if active_set_rw.read().await.contains(&channel_id) {
                 crate::monitor::monitor_location(data.clone(), http.clone(), *channel_id, *coords)
-                .await;
+                    .await;
                 info!("Channel {}: Monitor starting (DB) ", channel_id)
             }
         }
