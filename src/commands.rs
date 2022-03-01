@@ -9,8 +9,9 @@ use crate::{
     TGTGLocationContainer,
 };
 
-static ZOOM_LEVEL: u8 = 15;
+static OSM_ZOOM_LEVEL: u8 = 15;
 static DEFAULT_RADIUS: u64 = 3;
+static RADIUS_UNIT: &str = "km";
 
 #[command]
 async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
@@ -45,9 +46,10 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                     e.description("TooGoodToGo location is set for this channel");
                     e.field("Latitude", format!("{:.4}", latitude), true);
                     e.field("Longitude", format!("{:.4}", longitude), true);
+                    e.field("Radius", format!("{} {}", DEFAULT_RADIUS, RADIUS_UNIT), true);
                     e.url(format!(
                         "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-                        ZOOM_LEVEL, latitude, longitude
+                        OSM_ZOOM_LEVEL, latitude, longitude
                     ));
                     e
                 });
@@ -76,7 +78,13 @@ async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                     m.embed(|e| {
                         e.title("Radius");
                         e.description("TooGoodToGo radius is set for this channel");
-                        e.field("Radius", format!("{}", radius), true);
+                        e.field("Latitude", format!("{:.4}", location.latitude), true);
+                        e.field("Longitude", format!("{:.4}", location.longitude), true);
+                        e.field("Radius", format!("{} {}", radius, RADIUS_UNIT), true);
+                        e.url(format!(
+                            "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                            OSM_ZOOM_LEVEL, location.latitude, location.longitude
+                        ));
                         e
                     });
                     m
@@ -119,12 +127,16 @@ async fn status(ctx: &Context, msg: &Message) -> CommandResult {
             msg.channel_id
                 .send_message(&ctx.http, |m| {
                     m.embed(|e| {
-                        e.title("Status");
-                        e.description("TooGoodToGo status");
+                        e.title("Monitor Status");
+                        e.description("TooGoodToGo monitor status");
                         e.field("Latitude", format!("{:.4}", location.latitude), true);
                         e.field("Longitude", format!("{:.4}", location.longitude), true);
-                        e.field("Radius", format!("{}", location.radius), true);
+                        e.field("Radius", format!("{} {}", location.radius, RADIUS_UNIT), true);
                         e.field("Active", if is_active { "✅" } else { "❌" }, true);
+                        e.url(format!(
+                            "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                            OSM_ZOOM_LEVEL, location.latitude, location.longitude
+                        ));
                         e
                     });
                     m
@@ -181,7 +193,7 @@ async fn start(ctx: &Context, msg: &Message) -> CommandResult {
             coords,
         )
         .await;
-        msg.react(ctx, '✅').await?;
+        msg.react(ctx, '👍').await?;
     }
     Ok(())
 }
@@ -193,7 +205,7 @@ async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
         info!("Monitor stopped for channel {}", msg.channel_id);
         let mut active_channels = active_channels.write().await;
         active_channels.remove(&msg.channel_id);
-        msg.react(ctx, '✅').await?;
+        msg.react(ctx, '👍').await?;
     } else {
         msg.reply(ctx, "There was a problem with stopping monitoring")
             .await?;
