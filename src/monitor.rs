@@ -3,7 +3,6 @@ use serenity::prelude::TypeMap;
 use serenity::{http::Http, model::id::ChannelId};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::debug;
 use tracing::info;
 
 use crate::TGTGActiveChannelsContainer;
@@ -43,10 +42,10 @@ pub async fn monitor_location(
             let client_data_rw = client_data.write().await;
             let items =
                 crate::tgtg::get_items(&tgtg_credentials, &coords).expect("Could not get items");
-            debug!("Channel {}: Monitor found {} items", channel_id, items.len());
+            info!("Channel {}: Monitor found {} items", channel_id, items.len());
             for i in items {
-                debug!(
-                    "Channel {}: Item: {} with quantity {}",
+                info!(
+                    "Channel {}: Item {} with quantity {}",
                     channel_id, i.display_name, i.items_available
                 );
                 let item_message = {
@@ -159,6 +158,6 @@ pub async fn monitor_location(
             drop(client_data_rw);
             tokio::time::sleep(Duration::from_secs(MONITOR_INTERVAL)).await;
         }
-        info!("Thread terminated for monitoring location");
+        info!("Channel {}: Thread terminated for monitoring location", channel_id);
     });
 }

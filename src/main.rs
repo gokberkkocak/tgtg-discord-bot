@@ -7,6 +7,7 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     sync::Arc,
+    time::Duration,
 };
 
 use commands::*;
@@ -147,11 +148,13 @@ async fn main() -> anyhow::Result<()> {
         .framework(framework)
         .event_handler(Handler)
         .await?;
+    let location_map_rw = Arc::new(RwLock::new(location_map));
+    let active_set_rw = Arc::new(RwLock::new(active_set));
     {
         let mut data = client.data.write().await;
         data.insert::<ShardManagerContainer>(client.shard_manager.clone());
-        data.insert::<TGTGLocationContainer>(Arc::new(RwLock::new(location_map)));
-        data.insert::<TGTGActiveChannelsContainer>(Arc::new(RwLock::new(active_set)));
+        data.insert::<TGTGLocationContainer>(location_map_rw.clone());
+        data.insert::<TGTGActiveChannelsContainer>(active_set_rw.clone());
         data.insert::<TGTGItemMessageContainer>(Arc::new(RwLock::new(HashMap::new())));
         data.insert::<TGTGCredentialsContainer>(tgtg_credentials.clone());
         data.insert::<BotDBContainer>(bot_db);
@@ -164,6 +167,21 @@ async fn main() -> anyhow::Result<()> {
             .await
             .expect("Could not register ctrl+c handler");
         shard_manager.lock().await.shutdown_all().await;
+    });
+
+    // Start monitoring task already on db
+    let data = client.data.clone();
+    let http = client.cache_and_http.http.clone();
+    tokio::spawn(async move {
+        // wait 10 secs first to let the bot connect to discord
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        for (channel_id, coords) in location_map_rw.read().await.iter() {
+            if active_set_rw.read().await.contains(&channel_id) {
+                crate::monitor::monitor_location(data.clone(), http.clone(), *channel_id, *coords)
+                .await;
+                info!("Channel {}: Monitor starting (DB) ", channel_id)
+            }
+        }
     });
 
     if let Err(why) = client.start().await {

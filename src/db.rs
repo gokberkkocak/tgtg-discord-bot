@@ -3,7 +3,6 @@ use std::{collections::{HashMap, HashSet}, str::FromStr};
 use anyhow::Result;
 use serenity::model::id::ChannelId;
 use sqlx::SqlitePool;
-use tracing::info;
 
 use crate::CoordinatesWithRadius;
 
@@ -26,7 +25,6 @@ impl BotDB {
     ) -> Result<()> {
         let mut conn = self.pool.acquire().await?;
         let channel_id_str = channel_id.to_string();
-        info!("chnl_id_str: {}", channel_id_str);
         let optional_rec = sqlx::query!(
             r#"
                 SELECT active FROM channels WHERE channel_id = ?1

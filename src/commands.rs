@@ -15,7 +15,7 @@ static RADIUS_UNIT: &str = "km";
 
 #[command]
 async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
-    info!("Ping responded for channel {}", msg.channel_id);
+    info!("Channel {}: Ping recieved.", msg.channel_id);
     msg.channel_id.say(&ctx.http, "Pong!").await?;
     Ok(())
 }
@@ -34,8 +34,8 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         };
         location_map.write().await.insert(msg.channel_id, coords);
         info!(
-            "Location set as ({}, {}) for channel {}",
-            latitude, longitude, msg.channel_id
+            "Channel {}: Location set ({}, {})",
+            msg.channel_id, latitude, longitude,
         );
         msg.channel_id
             .send_message(&ctx.http, |m| {
@@ -83,7 +83,7 @@ async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                     radius,
                 };
                 bot_db.set_location(msg.channel_id, new_coords).await?;
-                info!("Radius set as {} for channel {}", radius, msg.channel_id);
+                info!("Channel {}: Radius set {} ", msg.channel_id, radius);
                 msg.channel_id
                     .send_message(&ctx.http, |m| {
                         m.embed(|e| {
@@ -222,7 +222,7 @@ async fn start(ctx: &Context, msg: &Message) -> CommandResult {
         )
         .await;
         msg.react(ctx, '👍').await?;
-        info!("Monitor started for channel {}", msg.channel_id);
+        info!("Channel {}: Monitor starting", msg.channel_id);
     }
     Ok(())
 }
@@ -231,13 +231,12 @@ async fn start(ctx: &Context, msg: &Message) -> CommandResult {
 async fn stop(ctx: &Context, msg: &Message) -> CommandResult {
     let data = ctx.data.write().await;
     if let Some(active_channels) = data.get::<TGTGActiveChannelsContainer>() {
-
         let mut active_channels = active_channels.write().await;
         active_channels.remove(&msg.channel_id);
         if let Some(bot_db) = data.get::<BotDBContainer>() {
             bot_db.change_active(msg.channel_id, false).await?;
             msg.react(ctx, '👍').await?;
-            info!("Monitor stopped for channel {}", msg.channel_id);
+            info!("Channel {}: Monitor stopping", msg.channel_id);
         } else {
             msg.reply(ctx, "There was a problem with starting monitoring (db)")
                 .await?;
