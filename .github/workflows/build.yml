@@ -18,7 +18,7 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v2
-    - name: Create the db
+    - name: DB Migrations
       run: |
         sqlite3 bot.db < migrations/20220301134633_bot.sql
     - name : Install python dependencies
