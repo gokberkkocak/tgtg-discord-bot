@@ -117,7 +117,7 @@ async fn main() -> anyhow::Result<()> {
         user_id: tgtg_user_token,
     });
 
-    tgtg::check_python();
+    tgtg::check_python()?;
 
     let http = Http::new_with_token(&discord_token);
 
