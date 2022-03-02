@@ -1,0 +1,30 @@
+name: Build/Test on Push or Pull Request
+
+on:  
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  
+jobs:
+  build_and_test:
+    name: Client build
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite:bot.db
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: DB Migrations
+      run: |
+        sqlite3 bot.db < migrations/20220301134633_bot.sql
+    - name : Install python dependencies
+      run: |
+        pip install -r requirements.txt
+    - name: Build and Test
+      run: |
+        cargo build
+        cargo test
