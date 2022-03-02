@@ -34,7 +34,7 @@ DATABASE_URL=sqlite:bot.db
 RUST_LOG=info
 ```
 
-Install python dependencies to yout python environment with:
+Install python dependencies to your python environment with:
 
 ```
 pip install -r requirements.txt
@@ -95,7 +95,7 @@ The bot responds with the confirmation of the  location and its monitoring statu
 
 The listing includes price, quantity and distance. The bot automatically updates if the quantity changes or deletes it if the item is not available anymore.
 
-## Compile
+## Compilation
 
 The system uses sqlx for compile time query verification. Therefore, the database file needs to be present and loaded into the environment variable at compile time.
 
@@ -106,4 +106,6 @@ pip install -r requirements.txt
 cargo b --release
 ```
 
+## Why Rust-Python Bridge
 
+While the unofficial tgtg API is only available on Python, there are plenty of discord API in various languages. The main reason this project uses Rust on top of tgtg python api is that I wanted to try out ```pyo3``` framework. I found the framework very flexible. The second reason is about different discord API frontends. For this purpose, I decided to test the ```serenity``` crate for discord which seems powerful. 
