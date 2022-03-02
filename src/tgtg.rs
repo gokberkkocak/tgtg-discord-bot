@@ -5,7 +5,7 @@ use tracing::info;
 
 use crate::{CoordinatesWithRadius, TGTGCredentials};
 
-pub(crate) fn test_python() -> PyResult<()> {
+pub(crate) fn check_python() -> PyResult<()> {
     Python::with_gil(|py| {
         let sys = py.import("sys")?;
         let version: String = sys.getattr("version")?.extract()?;
@@ -100,4 +100,22 @@ pub struct Store {
 #[derive(Debug, Deserialize)]
 pub struct Logo {
     pub current_url: String,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    
+    #[test]
+    fn test_python() -> PyResult<()> {
+        check_python()
+    }
+    
+    #[test]
+    fn test_tgtg_module() -> PyResult<()> {
+        Python::with_gil(|py| {
+            py.import("tgtg")?;
+            Ok(())
+        })
+    }
 }
