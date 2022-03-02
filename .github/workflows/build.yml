@@ -17,7 +17,7 @@ jobs:
       DATABASE_URL: sqlite:bot.db
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: DB Migrations
       run: |
         sqlite3 bot.db < migrations/20220301134633_bot.sql
