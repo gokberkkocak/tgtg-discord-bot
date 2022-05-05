@@ -119,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
 
     tgtg::check_python()?;
 
-    let http = Http::new_with_token(&discord_token);
+    let http = Http::new(&discord_token);
 
     // We will fetch your bot's owners and id
     let (owners, _bot_id) = match http.get_current_application_info().await {
@@ -146,7 +146,7 @@ async fn main() -> anyhow::Result<()> {
         .configure(|c| c.owners(owners).prefix("tg!"))
         .group(&GENERAL_GROUP);
 
-    let mut client = Client::builder(&discord_token)
+    let mut client = Client::builder(&discord_token, GatewayIntents::default())
         .framework(framework)
         .event_handler(Handler)
         .await?;
