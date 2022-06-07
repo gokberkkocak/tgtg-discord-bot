@@ -14,7 +14,7 @@ You will need a Discord API Token and TGTG credentials.
 
 Once you have the necessary token, put them into your environment variables (or .env file). 
 
-The system also uses an sqlite db system for the bot to remember channels and locations even after it goes offline and comes back online. 
+The system also uses an sqlite db system for the bot to remember channels and locations from previous runs. 
 
 You can generate an empty sqlite db as follows:
 
@@ -22,7 +22,7 @@ You can generate an empty sqlite db as follows:
 sqlite3 bot.db < migrations/20220301134633_bot.sql 
 ```
 
-You should also set the db environment variable as well.
+You should also set the db environment variable (DATABASE_URL) as well.
 
 Example ```.env``` file for environment variables:
 ```
@@ -62,7 +62,7 @@ Add reactions
 Available bot commands:
 ```
 tg!location <latitude> <longitude>
-tg!radius <radius>
+tg!radius <radius in km>
 tg!start
 tg!stop
 tg!status
@@ -108,4 +108,4 @@ cargo b --release
 
 ## Why Rust-Python Bridge
 
-While the unofficial tgtg API is only available on Python, there are plenty of discord API in various languages. The main reason this project uses Rust on top of tgtg python api is that I wanted to try out ```pyo3``` framework. I found the framework very flexible. The second reason is about different discord API frontends. For this purpose, I decided to test the ```serenity``` crate for discord which seems powerful. 
+While the unofficial tgtg API is only available on Python, there are plenty of discord API targetting libraries in various languages. The main reason this project uses Rust on top of tgtg python api is that I wanted to try out ```pyo3``` framework which bridges python land with rust. I found the framework very flexible. The second reason is to try a discord library in rust language. For this purpose, I used the ```serenity``` crate for discord which seems powerful. 
