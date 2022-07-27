@@ -146,10 +146,15 @@ async fn main() -> anyhow::Result<()> {
         .configure(|c| c.owners(owners).prefix("tg!"))
         .group(&GENERAL_GROUP);
 
-    let mut client = Client::builder(&discord_token, GatewayIntents::default())
-        .framework(framework)
+    let intents = GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::DIRECT_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT;
+
+    let mut client = Client::builder(&discord_token, intents)
         .event_handler(Handler)
+        .framework(framework)
         .await?;
+
     let location_map_rw = Arc::new(RwLock::new(location_map));
     let active_set_rw = Arc::new(RwLock::new(active_set));
     {
