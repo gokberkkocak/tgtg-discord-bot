@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyTuple};
 use serde::Deserialize;
@@ -78,6 +79,8 @@ pub struct TGTGListing {
     pub display_name: String,
     pub items_available: usize,
     pub distance: f64,
+    pub pickup_interval: Option<PickupInterval>,
+    pub purchase_end: Option<DateTime<Utc>>
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,6 +103,12 @@ pub struct Store {
 #[derive(Debug, Deserialize)]
 pub struct Logo {
     pub current_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PickupInterval {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
 }
 
 #[cfg(test)]

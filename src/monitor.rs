@@ -1,4 +1,5 @@
 use anyhow::Context;
+use chrono::Utc;
 use serenity::prelude::RwLock;
 use serenity::prelude::TypeMap;
 use serenity::{http::Http, model::id::ChannelId};
@@ -50,7 +51,7 @@ pub async fn monitor_location(
                 client_data.clone(),
                 http.clone(),
                 channel_id,
-                coords,
+                coords.clone(),
             )
             .await;
             if let Err(why) = res {
@@ -82,11 +83,8 @@ async fn update_location(
         channel_id,
         items.len()
     );
+    let almost_now = Utc::now();
     for i in items {
-        info!(
-            "Channel {}: Item {} with quantity {}",
-            channel_id, i.display_name, i.items_available
-        );
         let item_message = {
             let item_map = client_data_rw
                 .get::<TGTGItemMessageContainer>()
@@ -95,8 +93,25 @@ async fn update_location(
                 .await;
             item_map.get(&i.item.item_id).copied()
         };
-        //  Check if the item is available
-        if i.items_available > 0 {
+        // check regex
+        if let Some(regex) = coords.regex.as_ref() {
+            if !regex.is_match(&i.display_name) {
+                info!(
+                    "Channel {}: Item {} with quantity {} - not matching regex",
+                    channel_id, i.display_name, i.items_available
+                );
+                continue;
+            }
+        }
+        info!(
+            "Channel {}: Item {} with quantity {} - matching regex",
+            channel_id, i.display_name, i.items_available
+        );
+        //  Check if the item is available and if we are in the purchase time period
+        if i.purchase_end
+            .map(|end_time| end_time > almost_now)
+            .is_some() && i.items_available > 0
+        {
             if let Some(item_message) = item_message {
                 // Update the message with the new quantity
                 if item_message.quantity != i.items_available {
@@ -117,6 +132,17 @@ async fn update_location(
                                     true,
                                 );
                                 e.field("Quantity", i.items_available, true);
+                                if let Some(interval) = i.pickup_interval {
+                                    e.field(
+                                        "Pickup interval",
+                                        format!(
+                                            "{} - {}",
+                                            interval.start.format("%d/%m %H:%M"),
+                                            interval.end.format("%d/%m %H:%M")
+                                        ),
+                                        true,
+                                    );
+                                }
                                 e.field(
                                     "Distance",
                                     format!("{:.2} {}", i.distance, RADIUS_UNIT),
@@ -159,6 +185,17 @@ async fn update_location(
                                 true,
                             );
                             e.field("Quantity", i.items_available, true);
+                            if let Some(interval) = i.pickup_interval {
+                                e.field(
+                                    "Pickup interval",
+                                    format!(
+                                        "{} - {}",
+                                        interval.start.format("%d/%m %H:%M"),
+                                        interval.end.format("%d/%m %H:%M")
+                                    ),
+                                    true,
+                                );
+                            }
                             e.field(
                                 "Distance",
                                 format!("{:.2} {}", i.distance, RADIUS_UNIT),
@@ -184,7 +221,7 @@ async fn update_location(
                 );
             }
         } else {
-            // No quantity. Check we posted this item before, if yes delete
+            // No quantity or purchase period has passed. Check we posted this item before, if yes delete
             if let Some(item_message) = item_message {
                 channel_id
                     .delete_message(&http, item_message.message_id)

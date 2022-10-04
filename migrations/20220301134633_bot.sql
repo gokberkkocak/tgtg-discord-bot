@@ -5,5 +5,6 @@ CREATE TABLE IF NOT EXISTS channels (
     latitude                     REAL NOT NULL,
     longitude                    REAL NOT NULL,
     radius                       INTEGER NOT NULL,
+    regex                        TEXT,
     active                       INTEGER NOT NULL
 );
