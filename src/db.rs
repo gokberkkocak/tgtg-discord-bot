@@ -125,7 +125,6 @@ impl BotDB {
                     coords.regex = Some(Regex::new(regex_str).expect("Invalid regex"));
                 }
                 (channel_id, coords)
-
             })
             .collect();
         let active_set = records

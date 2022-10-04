@@ -80,7 +80,7 @@ pub struct TGTGListing {
     pub items_available: usize,
     pub distance: f64,
     pub pickup_interval: Option<PickupInterval>,
-    pub purchase_end: Option<DateTime<Utc>>
+    pub purchase_end: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,12 +114,12 @@ pub struct PickupInterval {
 #[cfg(test)]
 mod test {
     use super::*;
-    
+
     #[test]
     fn test_python() -> PyResult<()> {
         check_python()
     }
-    
+
     #[test]
     fn test_tgtg_module() -> PyResult<()> {
         Python::with_gil(|py| {

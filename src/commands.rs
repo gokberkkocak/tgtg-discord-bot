@@ -125,19 +125,17 @@ async fn regex(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         let regex_string = args.single::<String>()?;
         if let Some(location) = location_map.write().await.get_mut(&msg.channel_id) {
             if let Some(bot_db) = data.get::<BotDBContainer>() {
-                // check regex before setting
-                let questionable_regex = Regex::new(&regex_string);
-                if let Ok(regex) = questionable_regex {
+                if let Ok(regex) =  Regex::new(&regex_string) {
                     location.regex = Some(regex);
                     bot_db
                         .set_location(msg.channel_id, location.clone())
                         .await?;
-                    info!("Channel {}: Regex set {} ", msg.channel_id, regex_string);
+                    info!("Channel {}: Regex set {}", msg.channel_id, regex_string);
                     msg.channel_id
                         .send_message(&ctx.http, |m| {
                             m.embed(|e| {
                                 e.title("Regex");
-                                e.description("TooGoodToGo radius is set for this channel");
+                                e.description("TooGoodToGo regex is set for this channel");
                                 e.field("Latitude", format!("{:.4}", location.latitude), true);
                                 e.field("Longitude", format!("{:.4}", location.longitude), true);
                                 e.field(

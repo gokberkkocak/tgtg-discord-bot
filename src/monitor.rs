@@ -110,7 +110,8 @@ async fn update_location(
         //  Check if the item is available and if we are in the purchase time period
         if i.purchase_end
             .map(|end_time| end_time > almost_now)
-            .is_some() && i.items_available > 0
+            .is_some()
+            && i.items_available > 0
         {
             if let Some(item_message) = item_message {
                 // Update the message with the new quantity
@@ -137,8 +138,8 @@ async fn update_location(
                                         "Pickup interval",
                                         format!(
                                             "{} - {}",
-                                            interval.start.format("%d/%m %H:%M"),
-                                            interval.end.format("%d/%m %H:%M")
+                                            interval.start.format("%a %H:%M"),
+                                            interval.end.format("%a %H:%M")
                                         ),
                                         true,
                                     );
@@ -190,8 +191,8 @@ async fn update_location(
                                     "Pickup interval",
                                     format!(
                                         "{} - {}",
-                                        interval.start.format("%d/%m %H:%M"),
-                                        interval.end.format("%d/%m %H:%M")
+                                        interval.start.format("%a %H:%M"),
+                                        interval.end.format("%a %H:%M")
                                     ),
                                     true,
                                 );
