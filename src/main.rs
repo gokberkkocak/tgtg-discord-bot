@@ -207,13 +207,12 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         // wait 10 secs first to let the bot connect to discord
         tokio::time::sleep(Duration::from_secs(10)).await;
-        for (channel_id, coords) in location_map_rw.read().await.iter() {
+        for (channel_id, _coords) in location_map_rw.read().await.iter() {
             if active_set_rw.read().await.contains(&channel_id) {
                 crate::monitor::monitor_location(
                     data.clone(),
                     http.clone(),
                     *channel_id,
-                    coords.clone(),
                 )
                 .await;
                 info!("Channel {}: Monitor starting (DB) ", channel_id)

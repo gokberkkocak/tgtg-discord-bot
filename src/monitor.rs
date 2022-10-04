@@ -10,6 +10,7 @@ use tracing::warn;
 
 use crate::TGTGActiveChannelsContainer;
 use crate::TGTGCredentials;
+use crate::TGTGLocationContainer;
 use crate::RADIUS_UNIT;
 use crate::{
     CoordinatesWithRadius, ItemMessage, TGTGCredentialsContainer, TGTGItemMessageContainer,
@@ -21,7 +22,6 @@ pub async fn monitor_location(
     client_data: Arc<RwLock<TypeMap>>,
     http: Arc<Http>,
     channel_id: ChannelId,
-    coords: CoordinatesWithRadius,
 ) {
     let tgtg_credentials = {
         let client_data = client_data.read().await;
@@ -30,6 +30,16 @@ pub async fn monitor_location(
             .expect("Credentials missing")
             .clone()
     };
+    let coords = {
+        let client_data = client_data.read().await;
+        let location_container = client_data
+            .get::<TGTGLocationContainer>()
+            .expect("Location missing")
+            .read()
+            .await;
+        location_container.get(&channel_id).expect("Channel not found").clone()
+    };
+
     tokio::spawn(async move {
         loop {
             // If stop command is called. Stop monitoring
@@ -51,7 +61,7 @@ pub async fn monitor_location(
                 client_data.clone(),
                 http.clone(),
                 channel_id,
-                coords.clone(),
+                &coords,
             )
             .await;
             if let Err(why) = res {
@@ -74,7 +84,7 @@ async fn update_location(
     client_data: Arc<RwLock<TypeMap>>,
     http: Arc<Http>,
     channel_id: ChannelId,
-    coords: CoordinatesWithRadius,
+    coords: &CoordinatesWithRadius,
 ) -> anyhow::Result<()> {
     let client_data_rw = client_data.write().await;
     let items = crate::tgtg::get_items(&tgtg_credentials, &coords)?;

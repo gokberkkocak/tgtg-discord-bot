@@ -25,7 +25,7 @@ impl BotDB {
     pub async fn set_location(
         &self,
         channel_id: ChannelId,
-        coords: CoordinatesWithRadius,
+        coords: &CoordinatesWithRadius,
     ) -> Result<()> {
         let mut conn = self.pool.acquire().await?;
         let channel_id_str = channel_id.to_string();

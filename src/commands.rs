@@ -19,6 +19,8 @@ async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
+
+// TODO FIX changing coords shouldnt reset stuff
 #[command]
 #[num_args(2)]
 async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
@@ -54,7 +56,7 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             })
             .await?;
         if let Some(bot_db) = data.get::<BotDBContainer>() {
-            bot_db.set_location(msg.channel_id, coords).await?;
+            bot_db.set_location(msg.channel_id, &coords).await?;
         }
     } else {
         msg.reply(ctx, "There was a problem registering the location")
@@ -63,6 +65,7 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     Ok(())
 }
 
+// TODO FIX changing coords shouldnt reset stuff
 #[command]
 #[num_args(1)]
 async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
@@ -77,7 +80,7 @@ async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                     location.longitude,
                     radius,
                 );
-                bot_db.set_location(msg.channel_id, new_coords).await?;
+                bot_db.set_location(msg.channel_id, &new_coords).await?;
                 info!("Channel {}: Radius set {} ", msg.channel_id, radius);
                 msg.channel_id
                     .send_message(&ctx.http, |m| {
@@ -103,7 +106,7 @@ async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         } else {
             msg.reply(
                 ctx,
-                "There was a problem registering the radius (retriving the location)",
+                "There was a problem registering the radius (retrieving the location)",
             )
             .await?;
         }
@@ -128,7 +131,7 @@ async fn regex(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                 if let Ok(regex) =  Regex::new(&regex_string) {
                     location.regex = Some(regex);
                     bot_db
-                        .set_location(msg.channel_id, location.clone())
+                        .set_location(msg.channel_id, &location)
                         .await?;
                     info!("Channel {}: Regex set {}", msg.channel_id, regex_string);
                     msg.channel_id
@@ -238,17 +241,6 @@ async fn status(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 async fn start(ctx: &Context, msg: &Message) -> CommandResult {
-    let coords = {
-        let data = ctx.data.read().await;
-        if let Some(location_map) = data.get::<TGTGLocationContainer>() {
-            let location_map = location_map.read().await;
-            location_map.get(&msg.channel_id).cloned()
-        } else {
-            msg.reply(ctx, "There was a problem with starting monitoring")
-                .await?;
-            None
-        }
-    };
     let insert_success = {
         let data = ctx.data.write().await;
         if let Some(active_channels) = data.get::<TGTGActiveChannelsContainer>() {
@@ -271,12 +263,11 @@ async fn start(ctx: &Context, msg: &Message) -> CommandResult {
             false
         }
     };
-    if let Some(coords) = coords.filter(|_| insert_success) {
+    if insert_success {
         crate::monitor::monitor_location(
             ctx.data.clone(),
             ctx.http.clone(),
             msg.channel_id,
-            coords,
         )
         .await;
         msg.react(ctx, '👍').await?;
