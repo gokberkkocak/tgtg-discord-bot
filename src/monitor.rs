@@ -11,6 +11,7 @@ use tracing::warn;
 use crate::TGTGActiveChannelsContainer;
 use crate::TGTGCredentials;
 use crate::TGTGLocationContainer;
+use crate::OSM_ZOOM_LEVEL;
 use crate::RADIUS_UNIT;
 use crate::{
     CoordinatesWithRadius, ItemMessage, TGTGCredentialsContainer, TGTGItemMessageContainer,
@@ -37,7 +38,10 @@ pub async fn monitor_location(
             .expect("Location missing")
             .read()
             .await;
-        location_container.get(&channel_id).expect("Channel not found").clone()
+        location_container
+            .get(&channel_id)
+            .expect("Channel not found")
+            .clone()
     };
 
     tokio::spawn(async move {
@@ -144,12 +148,19 @@ async fn update_location(
                                 );
                                 e.field("Quantity", i.items_available, true);
                                 if let Some(interval) = i.pickup_interval {
+                                    let timezone = i.store.store_time_zone;
                                     e.field(
                                         "Pickup interval",
                                         format!(
                                             "{} - {}",
-                                            interval.start.format("%a %H:%M"),
-                                            interval.end.format("%a %H:%M")
+                                            interval
+                                                .start
+                                                .with_timezone(&timezone)
+                                                .format("%a %H:%M %Z"),
+                                            interval
+                                                .end
+                                                .with_timezone(&timezone)
+                                                .format("%a %H:%M %Z")
                                         ),
                                         true,
                                     );
@@ -160,6 +171,12 @@ async fn update_location(
                                     true,
                                 );
                                 e.image(i.store.logo_picture.current_url);
+                                e.url(format!(
+                                    "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                                    OSM_ZOOM_LEVEL,
+                                    i.pickup_location.location.latitude,
+                                    i.pickup_location.location.longitude
+                                ));
                                 e
                             });
                             m
@@ -197,12 +214,16 @@ async fn update_location(
                             );
                             e.field("Quantity", i.items_available, true);
                             if let Some(interval) = i.pickup_interval {
+                                let timezone = i.store.store_time_zone;
                                 e.field(
                                     "Pickup interval",
                                     format!(
                                         "{} - {}",
-                                        interval.start.format("%a %H:%M"),
-                                        interval.end.format("%a %H:%M")
+                                        interval
+                                            .start
+                                            .with_timezone(&timezone)
+                                            .format("%a %H:%M %Z"),
+                                        interval.end.with_timezone(&timezone).format("%a %H:%M %Z")
                                     ),
                                     true,
                                 );
@@ -213,6 +234,12 @@ async fn update_location(
                                 true,
                             );
                             e.image(i.store.logo_picture.current_url);
+                            e.url(format!(
+                                "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                                OSM_ZOOM_LEVEL,
+                                i.pickup_location.location.latitude,
+                                i.pickup_location.location.longitude
+                            ));
                             e
                         });
                         m

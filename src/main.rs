@@ -4,6 +4,7 @@ mod monitor;
 mod tgtg;
 
 static DEFAULT_RADIUS: u8 = 1;
+static OSM_ZOOM_LEVEL: u8 = 15;
 
 use std::{
     collections::{HashMap, HashSet},

@@ -7,10 +7,8 @@ use tracing::info;
 
 use crate::{
     BotDBContainer, CoordinatesWithRadius, ShardManagerContainer, TGTGActiveChannelsContainer,
-    TGTGLocationContainer, RADIUS_UNIT,
+    TGTGLocationContainer, RADIUS_UNIT, OSM_ZOOM_LEVEL,
 };
-
-static OSM_ZOOM_LEVEL: u8 = 15;
 
 #[command]
 async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
