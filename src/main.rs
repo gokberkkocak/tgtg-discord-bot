@@ -3,6 +3,9 @@ mod db;
 mod monitor;
 mod tgtg;
 
+static DEFAULT_RADIUS: u8 = 1;
+static OSM_ZOOM_LEVEL: u8 = 15;
+
 use std::{
     collections::{HashMap, HashSet},
     env,
@@ -11,6 +14,7 @@ use std::{
 };
 
 use commands::*;
+use regex::Regex;
 use serenity::{
     async_trait,
     client::bridge::gateway::ShardManager,
@@ -50,12 +54,34 @@ pub struct TGTGItemMessageContainer;
 impl TypeMapKey for TGTGItemMessageContainer {
     type Value = Arc<RwLock<HashMap<String, ItemMessage>>>;
 }
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct CoordinatesWithRadius {
     latitude: f64,
     longitude: f64,
     radius: u8,
+    regex: Option<Regex>,
 }
+
+impl CoordinatesWithRadius {
+    pub fn new(latitude: f64, longitude: f64) -> Self {
+        Self {
+            latitude,
+            longitude,
+            radius: DEFAULT_RADIUS,
+            regex: None,
+        }
+    }
+
+    pub fn new_with_radius(latitude: f64, longitude: f64, radius: u8) -> Self {
+        Self {
+            latitude,
+            longitude,
+            radius,
+            regex: None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct TGTGCredentials {
     pub access_token: String,
@@ -95,7 +121,7 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(ping, location, radius, status, start, stop, quit)]
+#[commands(ping, location, radius, regex, status, start, stop, quit)]
 struct General;
 
 #[tokio::main]
@@ -182,10 +208,14 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         // wait 10 secs first to let the bot connect to discord
         tokio::time::sleep(Duration::from_secs(10)).await;
-        for (channel_id, coords) in location_map_rw.read().await.iter() {
+        for (channel_id, _coords) in location_map_rw.read().await.iter() {
             if active_set_rw.read().await.contains(&channel_id) {
-                crate::monitor::monitor_location(data.clone(), http.clone(), *channel_id, *coords)
-                    .await;
+                crate::monitor::monitor_location(
+                    data.clone(),
+                    http.clone(),
+                    *channel_id,
+                )
+                .await;
                 info!("Channel {}: Monitor starting (DB) ", channel_id)
             }
         }

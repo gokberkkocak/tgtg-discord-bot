@@ -1,3 +1,5 @@
+use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyTuple};
 use serde::Deserialize;
@@ -78,6 +80,9 @@ pub struct TGTGListing {
     pub display_name: String,
     pub items_available: usize,
     pub distance: f64,
+    pub pickup_location: PickupLocation,
+    pub pickup_interval: Option<PickupInterval>,
+    pub purchase_end: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,21 +101,40 @@ pub struct ItemPrice {
 pub struct Store {
     pub store_name: String,
     pub logo_picture: Logo,
+    pub store_time_zone: Tz,
 }
 #[derive(Debug, Deserialize)]
 pub struct Logo {
     pub current_url: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PickupInterval {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PickupLocation {
+    pub location: Location,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Location {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+
 #[cfg(test)]
 mod test {
     use super::*;
-    
+
     #[test]
     fn test_python() -> PyResult<()> {
         check_python()
     }
-    
+
     #[test]
     fn test_tgtg_module() -> PyResult<()> {
         Python::with_gil(|py| {
