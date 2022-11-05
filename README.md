@@ -70,6 +70,7 @@ Available bot commands:
 ```
 tg!location <latitude> <longitude>
 tg!radius <radius in km>
+tg!regex <regular expression to filter bags>
 tg!start
 tg!stop
 tg!status
