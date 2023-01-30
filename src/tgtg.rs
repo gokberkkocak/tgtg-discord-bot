@@ -31,8 +31,8 @@ fn py_get_items(
             py,
             "from tgtg import TgtgClient
 import json
-def fetch_items(access_token, refresh_token, user_id, latitude, longitude, radius):
-    client = TgtgClient(access_token=access_token, refresh_token=refresh_token, user_id=user_id)
+def fetch_items(access_token, refresh_token, user_id, cookie, latitude, longitude, radius):
+    client = TgtgClient(access_token=access_token, refresh_token=refresh_token, user_id=user_id, cookie=cookie)
     items = client.get_items(
         favorites_only=False,
         latitude=latitude,
@@ -54,6 +54,7 @@ def fetch_items(access_token, refresh_token, user_id, latitude, longitude, radiu
                 &tgtg_credentials.access_token,
                 &tgtg_credentials.refresh_token,
                 &tgtg_credentials.user_id,
+                &tgtg_credentials.cookie,
                 &format!("{:.5}", coords.latitude),
                 &format!("{:.5}", coords.longitude),
                 &format!("{}", coords.radius),

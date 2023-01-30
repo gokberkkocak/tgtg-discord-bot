@@ -87,6 +87,7 @@ pub struct TGTGCredentials {
     pub access_token: String,
     pub refresh_token: String,
     pub user_id: String,
+    pub cookie: String,
 }
 
 pub struct TGTGCredentialsContainer;
@@ -136,11 +137,13 @@ async fn main() -> anyhow::Result<()> {
     let tgtg_access_token = env::var("TGTG_ACCESS_TOKEN")?;
     let tgtg_refresh_token = env::var("TGTG_REFRESH_TOKEN")?;
     let tgtg_user_token = env::var("TGTG_USER_ID")?;
+    let tgtg_cookie = env::var("TGTG_COOKIE")?;
     let db_url = env::var("DATABASE_URL")?;
     let tgtg_credentials = Arc::new(TGTGCredentials {
         access_token: tgtg_access_token,
         refresh_token: tgtg_refresh_token,
         user_id: tgtg_user_token,
+        cookie: tgtg_cookie,
     });
 
     tgtg::check_python()?;
