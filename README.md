@@ -29,6 +29,7 @@ Example ```.env``` file for environment variables:
 TGTG_ACCESS_TOKEN=XXX
 TGTG_REFRESH_TOKEN=XXX
 TGTG_USER_ID=XXX
+TGTG_COOKIE=XXX
 DISCORD_TOKEN=XXX
 DATABASE_URL=sqlite:bot.db
 RUST_LOG=info
