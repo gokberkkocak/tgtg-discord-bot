@@ -128,7 +128,7 @@ struct General;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load .env variables if it exists.
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     // Initialize the logger to use environment variables.
     tracing_subscriber::fmt::init();
