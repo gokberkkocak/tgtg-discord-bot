@@ -8,7 +8,7 @@ use regex::Regex;
 use serenity::model::id::ChannelId;
 use sqlx::SqlitePool;
 
-use crate::CoordinatesWithRadius;
+use crate::TGTGConfig;
 
 pub struct BotDB {
     pool: SqlitePool,
@@ -25,7 +25,7 @@ impl BotDB {
     pub async fn set_location(
         &self,
         channel_id: ChannelId,
-        coords: &CoordinatesWithRadius,
+        config: &TGTGConfig,
     ) -> Result<()> {
         let mut conn = self.pool.acquire().await?;
         let channel_id_str = channel_id.to_string();
@@ -37,16 +37,16 @@ impl BotDB {
         )
         .fetch_optional(&mut conn)
         .await?;
-        let regex_str = coords.regex.as_ref().map(|r| r.as_str());
+        let regex_str = config.regex.as_ref().map(|r| r.as_str());
         match optional_rec {
             Some(r) => {
                 sqlx::query!(
                     r#"
                         UPDATE channels SET latitude = ?1, longitude = ?2, radius = ?3, regex = ?4, active = ?5 WHERE channel_id = ?6
                     "#,
-                    coords.latitude,
-                    coords.longitude,
-                    coords.radius,
+                    config.latitude,
+                    config.longitude,
+                    config.radius,
                     regex_str,
                     r.active,
                     channel_id_str,
@@ -60,9 +60,9 @@ impl BotDB {
                         INSERT INTO channels (channel_id, latitude, longitude, radius, regex, active) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                     "#,
                     channel_id_str,
-                    coords.latitude,
-                    coords.longitude,
-                    coords.radius,
+                    config.latitude,
+                    config.longitude,
+                    config.radius,
                     regex_str,
                     0,
                 )
@@ -101,7 +101,7 @@ impl BotDB {
     pub async fn get_locations(
         &self,
     ) -> Result<(
-        HashMap<ChannelId, CoordinatesWithRadius>,
+        HashMap<ChannelId, TGTGConfig>,
         HashSet<ChannelId>,
     )> {
         let mut conn = self.pool.acquire().await?;
@@ -116,15 +116,15 @@ impl BotDB {
             .iter()
             .map(|r| {
                 let channel_id = ChannelId::from_str(&r.channel_id).expect("Invalid channel id");
-                let mut coords = CoordinatesWithRadius::new_with_radius(
+                let mut config = TGTGConfig::new_with_radius(
                     r.latitude as f64,
                     r.longitude as f64,
                     r.radius as u8,
                 );
                 if let Some(regex_str) = &r.regex {
-                    coords.regex = Some(Regex::new(regex_str).expect("Invalid regex"));
+                    config.regex = Some(Regex::new(regex_str).expect("Invalid regex"));
                 }
-                (channel_id, coords)
+                (channel_id, config)
             })
             .collect();
         let active_set = records

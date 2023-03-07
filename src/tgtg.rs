@@ -5,7 +5,7 @@ use pyo3::types::{IntoPyDict, PyTuple};
 use serde::Deserialize;
 use tracing::info;
 
-use crate::{CoordinatesWithRadius, TGTGCredentials};
+use crate::{TGTGConfig, TGTGBindings};
 
 pub(crate) fn check_python() -> PyResult<()> {
     Python::with_gil(|py| {
@@ -22,17 +22,38 @@ pub(crate) fn check_python() -> PyResult<()> {
     })
 }
 
-fn py_get_items(
-    tgtg_credentials: &TGTGCredentials,
-    coords: &CoordinatesWithRadius,
-) -> PyResult<String> {
+pub fn init_client(
+    access_token: &str,
+    refresh_token: &str,
+    user_id: &str,
+    cookie: &str,
+) -> PyResult<PyObject> {
     Python::with_gil(|py| {
-        let fun: Py<PyAny> = PyModule::from_code(
+        let tgtg_client_fun: Py<PyAny> = PyModule::from_code(
             py,
-            "from tgtg import TgtgClient
-import json
-def fetch_items(access_token, refresh_token, user_id, cookie, latitude, longitude, radius):
+            "
+from tgtg import TgtgClient
+def get_client(access_token, refresh_token, user_id, cookie):
     client = TgtgClient(access_token=access_token, refresh_token=refresh_token, user_id=user_id, cookie=cookie)
+    return client",
+            "",
+            "",
+        )?
+        .getattr("get_client")?
+        .into();
+        let args = PyTuple::new(py, &[&access_token, &refresh_token, &user_id, &cookie]);
+        let ret: PyObject = tgtg_client_fun.call1(py, args)?;
+        Ok(ret)
+    })
+}
+
+pub fn init_fetch_func() -> PyResult<PyObject> {
+    Python::with_gil(|py| {
+        let func = PyModule::from_code(
+            py,
+            "
+import json
+def fetch_items(client, latitude, longitude, radius):
     items = client.get_items(
         favorites_only=False,
         latitude=latitude,
@@ -46,31 +67,37 @@ def fetch_items(access_token, refresh_token, user_id, cookie, latitude, longitud
         )?
         .getattr("fetch_items")?
         .into();
+        Ok(func)
+    })
+}
 
-        // call object with PyTuple
-        let args = PyTuple::new(
+fn py_get_items(
+    tgtg: &TGTGBindings,
+    config: &TGTGConfig,
+) -> PyResult<String> {
+    Python::with_gil(|py| {
+        let client = tgtg.client.extract(py)?;
+        let params = PyTuple::new(
             py,
             &[
-                &tgtg_credentials.access_token,
-                &tgtg_credentials.refresh_token,
-                &tgtg_credentials.user_id,
-                &tgtg_credentials.cookie,
-                &format!("{:.5}", coords.latitude),
-                &format!("{:.5}", coords.longitude),
-                &format!("{}", coords.radius),
+                &format!("{:.5}", config.latitude),
+                &format!("{:.5}", config.longitude),
+                &format!("{}", config.radius),
             ],
-        );
-        let ret = fun.call1(py, args)?;
+        )
+        .as_slice();
+        let args = PyTuple::new(py, &[client, params[0], params[1], params[2]]);
+        let ret = tgtg.fetch_func.call1(py, args)?;
         let items = ret.extract::<String>(py)?;
         Ok(items)
     })
 }
 
 pub fn get_items(
-    tgtg_credentials: &TGTGCredentials,
-    coords: &CoordinatesWithRadius,
+    tgtg_credentials: &TGTGBindings,
+    config: &TGTGConfig,
 ) -> anyhow::Result<Vec<TGTGListing>> {
-    let py_items = py_get_items(tgtg_credentials, coords)?;
+    let py_items = py_get_items(tgtg_credentials, config)?;
     let items: Vec<TGTGListing> = serde_json::from_str(&py_items)?;
     Ok(items)
 }
@@ -125,7 +152,6 @@ pub struct Location {
     pub latitude: f64,
     pub longitude: f64,
 }
-
 
 #[cfg(test)]
 mod test {

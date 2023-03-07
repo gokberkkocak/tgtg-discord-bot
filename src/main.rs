@@ -14,6 +14,7 @@ use std::{
 };
 
 use commands::*;
+use pyo3::PyObject;
 use regex::Regex;
 use serenity::{
     async_trait,
@@ -37,10 +38,10 @@ impl TypeMapKey for ShardManagerContainer {
     type Value = Arc<Mutex<ShardManager>>;
 }
 
-pub struct TGTGLocationContainer;
+pub struct TGTGConfigContainer;
 
-impl TypeMapKey for TGTGLocationContainer {
-    type Value = Arc<RwLock<HashMap<ChannelId, CoordinatesWithRadius>>>;
+impl TypeMapKey for TGTGConfigContainer {
+    type Value = Arc<RwLock<HashMap<ChannelId, TGTGConfig>>>;
 }
 
 #[derive(Clone, Copy)]
@@ -55,14 +56,14 @@ impl TypeMapKey for TGTGItemMessageContainer {
     type Value = Arc<RwLock<HashMap<String, ItemMessage>>>;
 }
 #[derive(Clone)]
-pub struct CoordinatesWithRadius {
+pub struct TGTGConfig {
     latitude: f64,
     longitude: f64,
     radius: u8,
     regex: Option<Regex>,
 }
 
-impl CoordinatesWithRadius {
+impl TGTGConfig {
     pub fn new(latitude: f64, longitude: f64) -> Self {
         Self {
             latitude,
@@ -83,17 +84,15 @@ impl CoordinatesWithRadius {
 }
 
 #[derive(Debug)]
-pub struct TGTGCredentials {
-    pub access_token: String,
-    pub refresh_token: String,
-    pub user_id: String,
-    pub cookie: String,
+pub struct TGTGBindings {
+    pub client: PyObject,
+    pub fetch_func: PyObject,
 }
 
-pub struct TGTGCredentialsContainer;
+pub struct TGTGBindingsContainer;
 
-impl TypeMapKey for TGTGCredentialsContainer {
-    type Value = Arc<TGTGCredentials>;
+impl TypeMapKey for TGTGBindingsContainer {
+    type Value = Arc<TGTGBindings>;
 }
 
 pub struct TGTGActiveChannelsContainer;
@@ -133,20 +132,23 @@ async fn main() -> anyhow::Result<()> {
     // Initialize the logger to use environment variables.
     tracing_subscriber::fmt::init();
 
+    tgtg::check_python()?;
+
     let discord_token = env::var("DISCORD_TOKEN")?;
     let tgtg_access_token = env::var("TGTG_ACCESS_TOKEN")?;
     let tgtg_refresh_token = env::var("TGTG_REFRESH_TOKEN")?;
-    let tgtg_user_token = env::var("TGTG_USER_ID")?;
+    let tgtg_user_id = env::var("TGTG_USER_ID")?;
     let tgtg_cookie = env::var("TGTG_COOKIE")?;
     let db_url = env::var("DATABASE_URL")?;
-    let tgtg_credentials = Arc::new(TGTGCredentials {
-        access_token: tgtg_access_token,
-        refresh_token: tgtg_refresh_token,
-        user_id: tgtg_user_token,
-        cookie: tgtg_cookie,
+    let tgtg_credentials = Arc::new(TGTGBindings {
+        client: crate::tgtg::init_client(
+            &tgtg_access_token,
+            &tgtg_refresh_token,
+            &tgtg_user_id,
+            &tgtg_cookie,
+        )?,
+        fetch_func: crate::tgtg::init_fetch_func()?,
     });
-
-    tgtg::check_python()?;
 
     let http = Http::new(&discord_token);
 
@@ -189,10 +191,10 @@ async fn main() -> anyhow::Result<()> {
     {
         let mut data = client.data.write().await;
         data.insert::<ShardManagerContainer>(client.shard_manager.clone());
-        data.insert::<TGTGLocationContainer>(location_map_rw.clone());
+        data.insert::<TGTGConfigContainer>(location_map_rw.clone());
         data.insert::<TGTGActiveChannelsContainer>(active_set_rw.clone());
         data.insert::<TGTGItemMessageContainer>(Arc::new(RwLock::new(HashMap::new())));
-        data.insert::<TGTGCredentialsContainer>(tgtg_credentials.clone());
+        data.insert::<TGTGBindingsContainer>(tgtg_credentials.clone());
         data.insert::<BotDBContainer>(bot_db);
     }
 
@@ -211,14 +213,9 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         // wait 10 secs first to let the bot connect to discord
         tokio::time::sleep(Duration::from_secs(10)).await;
-        for (channel_id, _coords) in location_map_rw.read().await.iter() {
+        for (channel_id, _config) in location_map_rw.read().await.iter() {
             if active_set_rw.read().await.contains(&channel_id) {
-                crate::monitor::monitor_location(
-                    data.clone(),
-                    http.clone(),
-                    *channel_id,
-                )
-                .await;
+                crate::monitor::monitor_location(data.clone(), http.clone(), *channel_id).await;
                 info!("Channel {}: Monitor starting (DB) ", channel_id)
             }
         }
