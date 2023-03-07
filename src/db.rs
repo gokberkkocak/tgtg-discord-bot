@@ -8,7 +8,7 @@ use regex::Regex;
 use serenity::model::id::ChannelId;
 use sqlx::SqlitePool;
 
-use crate::CoordinatesWithRadius;
+use crate::TGTGLocation;
 
 pub struct BotDB {
     pool: SqlitePool,
@@ -25,7 +25,7 @@ impl BotDB {
     pub async fn set_location(
         &self,
         channel_id: ChannelId,
-        coords: &CoordinatesWithRadius,
+        coords: &TGTGLocation,
     ) -> Result<()> {
         let mut conn = self.pool.acquire().await?;
         let channel_id_str = channel_id.to_string();
@@ -101,7 +101,7 @@ impl BotDB {
     pub async fn get_locations(
         &self,
     ) -> Result<(
-        HashMap<ChannelId, CoordinatesWithRadius>,
+        HashMap<ChannelId, TGTGLocation>,
         HashSet<ChannelId>,
     )> {
         let mut conn = self.pool.acquire().await?;
@@ -116,7 +116,7 @@ impl BotDB {
             .iter()
             .map(|r| {
                 let channel_id = ChannelId::from_str(&r.channel_id).expect("Invalid channel id");
-                let mut coords = CoordinatesWithRadius::new_with_radius(
+                let mut coords = TGTGLocation::new_with_radius(
                     r.latitude as f64,
                     r.longitude as f64,
                     r.radius as u8,

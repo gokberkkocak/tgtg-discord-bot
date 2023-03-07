@@ -6,7 +6,7 @@ use serenity::prelude::*;
 use tracing::info;
 
 use crate::{
-    BotDBContainer, CoordinatesWithRadius, ShardManagerContainer, TGTGActiveChannelsContainer,
+    BotDBContainer, TGTGLocation, ShardManagerContainer, TGTGActiveChannelsContainer,
     TGTGLocationContainer, OSM_ZOOM_LEVEL, RADIUS_UNIT,
 };
 
@@ -31,7 +31,7 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                     location.longitude = longitude;
                     location.clone()
                 } else {
-                    let location = CoordinatesWithRadius::new(latitude, longitude);
+                    let location = TGTGLocation::new(latitude, longitude);
                     location_map
                         .write()
                         .await
@@ -77,8 +77,11 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 .await?;
         }
     } else {
-        msg.reply(ctx, "There was a problem registering the location (client data)")
-            .await?;
+        msg.reply(
+            ctx,
+            "There was a problem registering the location (client data)",
+        )
+        .await?;
     }
     Ok(())
 }
@@ -119,11 +122,8 @@ async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                     .await?;
             }
         } else {
-            msg.reply(
-                ctx,
-                "There was a problem registering the radius (location)",
-            )
-            .await?;
+            msg.reply(ctx, "There was a problem registering the radius (location)")
+                .await?;
         }
     } else {
         msg.reply(
@@ -177,11 +177,8 @@ async fn regex(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
                     .await?;
             }
         } else {
-            msg.reply(
-                ctx,
-                "There was a problem registering the regex (location)",
-            )
-            .await?;
+            msg.reply(ctx, "There was a problem registering the regex (location)")
+                .await?;
         }
     } else {
         msg.reply(
@@ -236,11 +233,8 @@ async fn status(ctx: &Context, msg: &Message) -> CommandResult {
                 })
                 .await?;
         } else {
-            msg.reply(
-                ctx,
-                "There was a problem registering the radius (location)",
-            )
-            .await?;
+            msg.reply(ctx, "There was a problem registering the radius (location)")
+                .await?;
         }
     } else {
         msg.reply(
@@ -263,8 +257,11 @@ async fn start(ctx: &Context, msg: &Message) -> CommandResult {
                 bot_db.change_active(msg.channel_id, true).await?;
                 true
             } else {
-                msg.reply(ctx, "There was a problem with starting monitoring (database)")
-                    .await?;
+                msg.reply(
+                    ctx,
+                    "There was a problem with starting monitoring (database)",
+                )
+                .await?;
                 false
             }
         } else {

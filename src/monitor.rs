@@ -9,13 +9,11 @@ use tracing::info;
 use tracing::warn;
 
 use crate::TGTGActiveChannelsContainer;
-use crate::TGTGCredentials;
+use crate::TGTGBindings;
 use crate::TGTGLocationContainer;
 use crate::OSM_ZOOM_LEVEL;
 use crate::RADIUS_UNIT;
-use crate::{
-    CoordinatesWithRadius, ItemMessage, TGTGCredentialsContainer, TGTGItemMessageContainer,
-};
+use crate::{TGTGLocation, ItemMessage, TGTGBindingsContainer, TGTGItemMessageContainer};
 
 const MONITOR_INTERVAL: u64 = 60;
 
@@ -27,7 +25,7 @@ pub async fn monitor_location(
     let tgtg_credentials = {
         let client_data = client_data.read().await;
         client_data
-            .get::<TGTGCredentialsContainer>()
+            .get::<TGTGBindingsContainer>()
             .expect("Credentials missing")
             .clone()
     };
@@ -84,11 +82,11 @@ pub async fn monitor_location(
 }
 
 async fn update_location(
-    tgtg_credentials: Arc<TGTGCredentials>,
+    tgtg_credentials: Arc<TGTGBindings>,
     client_data: Arc<RwLock<TypeMap>>,
     http: Arc<Http>,
     channel_id: ChannelId,
-    coords: &CoordinatesWithRadius,
+    coords: &TGTGLocation,
 ) -> anyhow::Result<()> {
     let client_data_rw = client_data.write().await;
     let items = crate::tgtg::get_items(&tgtg_credentials, &coords)?;
