@@ -5,7 +5,7 @@ use pyo3::types::{IntoPyDict, PyTuple};
 use serde::Deserialize;
 use tracing::info;
 
-use crate::{TGTGLocation, TGTGBindings};
+use crate::{TGTGConfig, TGTGBindings};
 
 pub(crate) fn check_python() -> PyResult<()> {
     Python::with_gil(|py| {
@@ -73,16 +73,16 @@ def fetch_items(client, latitude, longitude, radius):
 
 fn py_get_items(
     tgtg: &TGTGBindings,
-    coords: &TGTGLocation,
+    config: &TGTGConfig,
 ) -> PyResult<String> {
     Python::with_gil(|py| {
         let client = tgtg.client.extract(py)?;
         let params = PyTuple::new(
             py,
             &[
-                &format!("{:.5}", coords.latitude),
-                &format!("{:.5}", coords.longitude),
-                &format!("{}", coords.radius),
+                &format!("{:.5}", config.latitude),
+                &format!("{:.5}", config.longitude),
+                &format!("{}", config.radius),
             ],
         )
         .as_slice();
@@ -95,9 +95,9 @@ fn py_get_items(
 
 pub fn get_items(
     tgtg_credentials: &TGTGBindings,
-    coords: &TGTGLocation,
+    config: &TGTGConfig,
 ) -> anyhow::Result<Vec<TGTGListing>> {
-    let py_items = py_get_items(tgtg_credentials, coords)?;
+    let py_items = py_get_items(tgtg_credentials, config)?;
     let items: Vec<TGTGListing> = serde_json::from_str(&py_items)?;
     Ok(items)
 }

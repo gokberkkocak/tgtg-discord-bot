@@ -38,10 +38,10 @@ impl TypeMapKey for ShardManagerContainer {
     type Value = Arc<Mutex<ShardManager>>;
 }
 
-pub struct TGTGLocationContainer;
+pub struct TGTGConfigContainer;
 
-impl TypeMapKey for TGTGLocationContainer {
-    type Value = Arc<RwLock<HashMap<ChannelId, TGTGLocation>>>;
+impl TypeMapKey for TGTGConfigContainer {
+    type Value = Arc<RwLock<HashMap<ChannelId, TGTGConfig>>>;
 }
 
 #[derive(Clone, Copy)]
@@ -56,14 +56,14 @@ impl TypeMapKey for TGTGItemMessageContainer {
     type Value = Arc<RwLock<HashMap<String, ItemMessage>>>;
 }
 #[derive(Clone)]
-pub struct TGTGLocation {
+pub struct TGTGConfig {
     latitude: f64,
     longitude: f64,
     radius: u8,
     regex: Option<Regex>,
 }
 
-impl TGTGLocation {
+impl TGTGConfig {
     pub fn new(latitude: f64, longitude: f64) -> Self {
         Self {
             latitude,
@@ -191,7 +191,7 @@ async fn main() -> anyhow::Result<()> {
     {
         let mut data = client.data.write().await;
         data.insert::<ShardManagerContainer>(client.shard_manager.clone());
-        data.insert::<TGTGLocationContainer>(location_map_rw.clone());
+        data.insert::<TGTGConfigContainer>(location_map_rw.clone());
         data.insert::<TGTGActiveChannelsContainer>(active_set_rw.clone());
         data.insert::<TGTGItemMessageContainer>(Arc::new(RwLock::new(HashMap::new())));
         data.insert::<TGTGBindingsContainer>(tgtg_credentials.clone());
@@ -213,7 +213,7 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         // wait 10 secs first to let the bot connect to discord
         tokio::time::sleep(Duration::from_secs(10)).await;
-        for (channel_id, _coords) in location_map_rw.read().await.iter() {
+        for (channel_id, _config) in location_map_rw.read().await.iter() {
             if active_set_rw.read().await.contains(&channel_id) {
                 crate::monitor::monitor_location(data.clone(), http.clone(), *channel_id).await;
                 info!("Channel {}: Monitor starting (DB) ", channel_id)

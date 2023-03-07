@@ -6,8 +6,8 @@ use serenity::prelude::*;
 use tracing::info;
 
 use crate::{
-    BotDBContainer, TGTGLocation, ShardManagerContainer, TGTGActiveChannelsContainer,
-    TGTGLocationContainer, OSM_ZOOM_LEVEL, RADIUS_UNIT,
+    BotDBContainer, TGTGConfig, ShardManagerContainer, TGTGActiveChannelsContainer,
+    TGTGConfigContainer, OSM_ZOOM_LEVEL, RADIUS_UNIT,
 };
 
 #[command]
@@ -21,7 +21,7 @@ async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
 #[num_args(2)]
 async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let data = ctx.data.write().await;
-    if let Some(location_map) = data.get::<TGTGLocationContainer>() {
+    if let Some(location_map) = data.get::<TGTGConfigContainer>() {
         if let Some(bot_db) = data.get::<BotDBContainer>() {
             let latitude = args.single::<f64>()?;
             let longitude = args.single::<f64>()?;
@@ -31,7 +31,7 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                     location.longitude = longitude;
                     location.clone()
                 } else {
-                    let location = TGTGLocation::new(latitude, longitude);
+                    let location = TGTGConfig::new(latitude, longitude);
                     location_map
                         .write()
                         .await
@@ -90,7 +90,7 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 #[num_args(1)]
 async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let data = ctx.data.write().await;
-    if let Some(location_map) = data.get::<TGTGLocationContainer>() {
+    if let Some(location_map) = data.get::<TGTGConfigContainer>() {
         let radius = args.single::<u8>()?;
         if let Some(location) = location_map.write().await.get_mut(&msg.channel_id) {
             location.radius = radius;
@@ -139,7 +139,7 @@ async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 #[num_args(1)]
 async fn regex(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let data = ctx.data.write().await;
-    if let Some(location_map) = data.get::<TGTGLocationContainer>() {
+    if let Some(location_map) = data.get::<TGTGConfigContainer>() {
         let regex_string = args.single::<String>()?;
         if let Some(location) = location_map.write().await.get_mut(&msg.channel_id) {
             if let Some(bot_db) = data.get::<BotDBContainer>() {
@@ -205,7 +205,7 @@ async fn status(ctx: &Context, msg: &Message) -> CommandResult {
             false
         }
     };
-    if let Some(location_map) = data.get::<TGTGLocationContainer>() {
+    if let Some(location_map) = data.get::<TGTGConfigContainer>() {
         if let Some(location) = location_map.read().await.get(&msg.channel_id) {
             msg.channel_id
                 .send_message(&ctx.http, |m| {

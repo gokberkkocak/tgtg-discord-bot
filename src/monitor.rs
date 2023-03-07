@@ -10,10 +10,10 @@ use tracing::warn;
 
 use crate::TGTGActiveChannelsContainer;
 use crate::TGTGBindings;
-use crate::TGTGLocationContainer;
+use crate::TGTGConfigContainer;
 use crate::OSM_ZOOM_LEVEL;
 use crate::RADIUS_UNIT;
-use crate::{TGTGLocation, ItemMessage, TGTGBindingsContainer, TGTGItemMessageContainer};
+use crate::{TGTGConfig, ItemMessage, TGTGBindingsContainer, TGTGItemMessageContainer};
 
 const MONITOR_INTERVAL: u64 = 60;
 
@@ -29,10 +29,10 @@ pub async fn monitor_location(
             .expect("Credentials missing")
             .clone()
     };
-    let coords = {
+    let config = {
         let client_data = client_data.read().await;
         let location_container = client_data
-            .get::<TGTGLocationContainer>()
+            .get::<TGTGConfigContainer>()
             .expect("Location missing")
             .read()
             .await;
@@ -63,7 +63,7 @@ pub async fn monitor_location(
                 client_data.clone(),
                 http.clone(),
                 channel_id,
-                &coords,
+                &config,
             )
             .await;
             if let Err(why) = res {
@@ -86,10 +86,10 @@ async fn update_location(
     client_data: Arc<RwLock<TypeMap>>,
     http: Arc<Http>,
     channel_id: ChannelId,
-    coords: &TGTGLocation,
+    config: &TGTGConfig,
 ) -> anyhow::Result<()> {
     let client_data_rw = client_data.write().await;
-    let items = crate::tgtg::get_items(&tgtg_credentials, &coords)?;
+    let items = crate::tgtg::get_items(&tgtg_credentials, &config)?;
     info!(
         "Channel {}: Monitor found {} items",
         channel_id,
@@ -106,7 +106,7 @@ async fn update_location(
             item_map.get(&i.item.item_id).copied()
         };
         // check regex
-        if let Some(regex) = coords.regex.as_ref() {
+        if let Some(regex) = config.regex.as_ref() {
             if !regex.is_match(&i.display_name) {
                 info!(
                     "Channel {}: Item {} with quantity {} - not matching regex",
