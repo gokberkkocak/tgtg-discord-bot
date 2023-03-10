@@ -3,8 +3,16 @@ name: Build/Test on Push or Pull Request
 on:  
   push:
     branches: [ main ]
+    paths:
+      - '**.rs'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
   pull_request:
     branches: [ main ]
+    paths:
+      - '**.rs'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
 
 env:
   CARGO_TERM_COLOR: always
