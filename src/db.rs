@@ -35,7 +35,7 @@ impl BotDB {
             "#,
             channel_id_str,
         )
-        .fetch_optional(&mut conn)
+        .fetch_optional(&mut *conn)
         .await?;
         let regex_str = config.regex.as_ref().map(|r| r.as_str());
         match optional_rec {
@@ -51,7 +51,7 @@ impl BotDB {
                     r.active,
                     channel_id_str,
                 )
-                .execute(&mut conn)
+                .execute(&mut *conn)
                 .await?;
             }
             None => {
@@ -66,7 +66,7 @@ impl BotDB {
                     regex_str,
                     0,
                 )
-                .execute(&mut conn)
+                .execute(&mut *conn)
                 .await?;
             }
         }
@@ -82,7 +82,7 @@ impl BotDB {
             "#,
             channel_id_str,
         )
-        .fetch_optional(&mut conn)
+        .fetch_optional(&mut *conn)
         .await?;
         if let Some(_) = optional_rec {
             sqlx::query!(
@@ -92,7 +92,7 @@ impl BotDB {
                 active,
                 channel_id_str,
             )
-            .execute(&mut conn)
+            .execute(&mut *conn)
             .await?;
         }
         Ok(())
@@ -110,7 +110,7 @@ impl BotDB {
                 SELECT channel_id, latitude, longitude, radius, regex, active FROM channels
             "#
         )
-        .fetch_all(&mut conn)
+        .fetch_all(&mut *conn)
         .await?;
         let location_map = records
             .iter()
