@@ -129,6 +129,7 @@ Type=simple
 Restart=always
 WorkingDirectory=/your/path/tgtg/
 Environment=PATH=/your/venv/path/bin
+Environment=RUST_LOG=warn
 ExecStart=/your/path/tgtg/tgtg-discord-bot
 Restart=on-failure
 
@@ -137,6 +138,8 @@ WantedBy=multi-user.target
 ```
 
 Change the working directory, virtual environment path and the executable path accordingly.
+
+You can change the RUST_LOG environment variable to ```info``` to store more detailed logs including tgtg bag listings.
 
 ## Why Rust-Python Bridge
 
