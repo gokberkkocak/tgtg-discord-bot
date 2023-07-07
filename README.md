@@ -115,6 +115,29 @@ pip install -r requirements.txt
 cargo b --release
 ```
 
+## Systemctl service
+
+You can use the provided ```systemd``` service file to run the bot as a service. 
+
+```
+[Unit]
+Description=TGTG discord bot service
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+WorkingDirectory=/your/path/tgtg/
+Environment=PATH=/your/venv/path/bin
+ExecStart=/your/path/tgtg/tgtg-discord-bot
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Change the working directory, virtual environment path and the executable path accordingly.
+
 ## Why Rust-Python Bridge
 
 While the unofficial tgtg API is only available on Python, there are plenty of discord API targetting libraries in various languages. The main reason this project uses Rust on top of tgtg python api is that I wanted to try out ```pyo3``` framework which bridges python land with rust. I found the framework very flexible. The second reason is to try a discord library in rust language. For this purpose, I used the ```serenity``` crate for discord which seems powerful. 
