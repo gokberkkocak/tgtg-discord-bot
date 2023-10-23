@@ -1,4 +1,4 @@
-# TooGoodToGo Discord Bot 🥪
+# TooGoodToGo Discord Bot 🥪 ![build](https://github.com/gokberkkocak/tgtg-discord-bot/actions/workflows/build.yml/badge.svg)
 
 This discord bot helps you keep track what TGTG magic bags available in a given area. 
 
