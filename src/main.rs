@@ -166,10 +166,14 @@ async fn main() -> anyhow::Result<()> {
             }
             match http.get_current_user().await {
                 Ok(bot_id) => (owners, bot_id.id),
-                Err(why) => panic!("Could not access the bot id: {:?}", why),
+                Err(why) => {
+                    anyhow::bail!("Could not access the bot id: {:?}", why)
+                }
             }
         }
-        Err(why) => panic!("Could not access application info: {:?}", why),
+        Err(why) => {
+            anyhow::bail!("Could not access application info: {:?}", why)
+        }
     };
 
     // Bot DB
