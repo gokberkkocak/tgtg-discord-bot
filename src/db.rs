@@ -22,11 +22,7 @@ impl BotDB {
         Ok(token_db)
     }
 
-    pub async fn set_location(
-        &self,
-        channel_id: ChannelId,
-        config: &TGTGConfig,
-    ) -> Result<()> {
+    pub async fn set_location(&self, channel_id: ChannelId, config: &TGTGConfig) -> Result<()> {
         let mut conn = self.pool.acquire().await?;
         let channel_id_str = channel_id.to_string();
         let optional_rec = sqlx::query!(
@@ -84,7 +80,7 @@ impl BotDB {
         )
         .fetch_optional(&mut *conn)
         .await?;
-        if let Some(_) = optional_rec {
+        if optional_rec.is_some() {
             sqlx::query!(
                 r#"
                     UPDATE channels SET active = ?1 WHERE channel_id = ?2
@@ -100,10 +96,7 @@ impl BotDB {
 
     pub async fn get_locations(
         &self,
-    ) -> Result<(
-        HashMap<ChannelId, TGTGConfig>,
-        HashSet<ChannelId>,
-    )> {
+    ) -> Result<(HashMap<ChannelId, TGTGConfig>, HashSet<ChannelId>)> {
         let mut conn = self.pool.acquire().await?;
         let records = sqlx::query!(
             r#"
@@ -116,11 +109,8 @@ impl BotDB {
             .iter()
             .map(|r| {
                 let channel_id = ChannelId::from_str(&r.channel_id).expect("Invalid channel id");
-                let mut config = TGTGConfig::new_with_radius(
-                    r.latitude as f64,
-                    r.longitude as f64,
-                    r.radius as u8,
-                );
+                let mut config =
+                    TGTGConfig::new_with_radius(r.latitude, r.longitude, r.radius as u8);
                 if let Some(regex_str) = &r.regex {
                     config.regex = Some(Regex::new(regex_str).expect("Invalid regex"));
                 }
