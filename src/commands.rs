@@ -1,4 +1,5 @@
 use regex::Regex;
+use serenity::builder::{CreateEmbed, CreateMessage};
 use serenity::framework::standard::Args;
 use serenity::framework::standard::{macros::command, CommandResult};
 use serenity::model::prelude::*;
@@ -6,7 +7,7 @@ use serenity::prelude::*;
 use tracing::info;
 
 use crate::{
-    BotDBContainer, TGTGConfig, ShardManagerContainer, TGTGActiveChannelsContainer,
+    BotDBContainer, ShardManagerContainer, TGTGActiveChannelsContainer, TGTGConfig,
     TGTGConfigContainer, OSM_ZOOM_LEVEL, RADIUS_UNIT,
 };
 
@@ -44,29 +45,25 @@ async fn location(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 "Channel {}: Location set ({}, {})",
                 msg.channel_id, latitude, longitude,
             );
+            let mut embed = CreateEmbed::new()
+                .title("Location")
+                .description("TooGoodToGo location is set for this channel")
+                .url(format!(
+                    "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                    OSM_ZOOM_LEVEL, latitude, longitude
+                ))
+                .field("Latitude", format!("{:.4}", latitude), true)
+                .field("Longitude", format!("{:.4}", longitude), true)
+                .field(
+                    "Radius",
+                    format!("{} {}", location.radius, RADIUS_UNIT),
+                    true,
+                );
+            if let Some(regex) = &location.regex {
+                embed = embed.field("Regex", regex.as_str().replace('*', "\\*"), true);
+            }
             msg.channel_id
-                .send_message(&ctx.http, |m| {
-                    m.embed(|e| {
-                        e.title("Location");
-                        e.description("TooGoodToGo location is set for this channel");
-                        e.field("Latitude", format!("{:.4}", latitude), true);
-                        e.field("Longitude", format!("{:.4}", longitude), true);
-                        e.field(
-                            "Radius",
-                            format!("{} {}", location.radius, RADIUS_UNIT),
-                            true,
-                        );
-                        if let Some(regex) = &location.regex {
-                            e.field("Regex", regex.as_str().replace("*", "\\*"), true);
-                        }
-                        e.url(format!(
-                            "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-                            OSM_ZOOM_LEVEL, latitude, longitude
-                        ));
-                        e
-                    });
-                    m
-                })
+                .send_message(&ctx.http, CreateMessage::new().add_embed(embed))
                 .await?;
         } else {
             msg.channel_id
@@ -95,27 +92,24 @@ async fn radius(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         if let Some(location) = location_map.write().await.get_mut(&msg.channel_id) {
             location.radius = radius;
             if let Some(bot_db) = data.get::<BotDBContainer>() {
-                bot_db.set_location(msg.channel_id, &location).await?;
+                bot_db.set_location(msg.channel_id, location).await?;
                 info!("Channel {}: Radius set {} ", msg.channel_id, radius);
+                let mut embed = CreateEmbed::new()
+                    .title("Radius")
+                    .description("TooGoodToGo radius is set for this channel")
+                    .field("Latitude", format!("{:.4}", location.latitude), true)
+                    .field("Longitude", format!("{:.4}", location.longitude), true)
+                    .field("Radius", format!("{} {}", radius, RADIUS_UNIT), true)
+                    .url(format!(
+                        "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                        OSM_ZOOM_LEVEL, location.latitude, location.longitude
+                    ));
+                if let Some(regex) = &location.regex {
+                    embed = embed.field("Regex", regex.as_str().replace('*', "\\*"), true);
+                }
+
                 msg.channel_id
-                    .send_message(&ctx.http, |m| {
-                        m.embed(|e| {
-                            e.title("Radius");
-                            e.description("TooGoodToGo radius is set for this channel");
-                            e.field("Latitude", format!("{:.4}", location.latitude), true);
-                            e.field("Longitude", format!("{:.4}", location.longitude), true);
-                            e.field("Radius", format!("{} {}", radius, RADIUS_UNIT), true);
-                            if let Some(regex) = &location.regex {
-                                e.field("Regex", regex.as_str().replace("*", "\\*"), true);
-                            }
-                            e.url(format!(
-                                "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-                                OSM_ZOOM_LEVEL, location.latitude, location.longitude
-                            ));
-                            e
-                        });
-                        m
-                    })
+                    .send_message(&ctx.http, CreateMessage::new().add_embed(embed))
                     .await?;
             } else {
                 msg.reply(ctx, "There was a problem registering the radius (database)")
@@ -145,29 +139,25 @@ async fn regex(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
             if let Some(bot_db) = data.get::<BotDBContainer>() {
                 if let Ok(regex) = Regex::new(&regex_string) {
                     location.regex = Some(regex);
-                    bot_db.set_location(msg.channel_id, &location).await?;
+                    bot_db.set_location(msg.channel_id, location).await?;
                     info!("Channel {}: Regex set {}", msg.channel_id, regex_string);
+                    let embed = CreateEmbed::new()
+                        .title("Regex")
+                        .description("TooGoodToGo regex is set for this channel")
+                        .field("Latitude", format!("{:.4}", location.latitude), true)
+                        .field("Longitude", format!("{:.4}", location.longitude), true)
+                        .field(
+                            "Radius",
+                            format!("{} {}", location.radius, RADIUS_UNIT),
+                            true,
+                        )
+                        .field("Regex", regex_string.replace('*', "\\*"), true)
+                        .url(format!(
+                            "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                            OSM_ZOOM_LEVEL, location.latitude, location.longitude
+                        ));
                     msg.channel_id
-                        .send_message(&ctx.http, |m| {
-                            m.embed(|e| {
-                                e.title("Regex");
-                                e.description("TooGoodToGo regex is set for this channel");
-                                e.field("Latitude", format!("{:.4}", location.latitude), true);
-                                e.field("Longitude", format!("{:.4}", location.longitude), true);
-                                e.field(
-                                    "Radius",
-                                    format!("{} {}", location.radius, RADIUS_UNIT),
-                                    true,
-                                );
-                                e.field("Regex", regex_string.replace("*", "\\*"), true);
-                                e.url(format!(
-                                    "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-                                    OSM_ZOOM_LEVEL, location.latitude, location.longitude
-                                ));
-                                e
-                            });
-                            m
-                        })
+                        .send_message(&ctx.http, CreateMessage::new().embed(embed))
                         .await?;
                 } else {
                     msg.reply(ctx, "The regex is not valid").await?;
@@ -207,31 +197,26 @@ async fn status(ctx: &Context, msg: &Message) -> CommandResult {
     };
     if let Some(location_map) = data.get::<TGTGConfigContainer>() {
         if let Some(location) = location_map.read().await.get(&msg.channel_id) {
-            msg.channel_id
-                .send_message(&ctx.http, |m| {
-                    m.embed(|e| {
-                        e.title("Monitor Status");
-                        e.description("TooGoodToGo monitor status");
-                        e.field("Latitude", format!("{:.4}", location.latitude), true);
-                        e.field("Longitude", format!("{:.4}", location.longitude), true);
-                        e.field(
-                            "Radius",
-                            format!("{} {}", location.radius, RADIUS_UNIT),
-                            true,
-                        );
-                        if let Some(regex) = &location.regex {
-                            e.field("Regex", regex.as_str().replace("*", "\\*"), true);
-                        }
-                        e.field("Active", if is_active { "✅" } else { "❌" }, true);
-                        e.url(format!(
-                            "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-                            OSM_ZOOM_LEVEL, location.latitude, location.longitude
-                        ));
-                        e
-                    });
-                    m
-                })
-                .await?;
+            let mut embed = CreateEmbed::new()
+                .title("Monitor Status")
+                .description("TooGoodToGo monitor status")
+                .field("Latitude", format!("{:.4}", location.latitude), true)
+                .field("Longitude", format!("{:.4}", location.longitude), true)
+                .field(
+                    "Radius",
+                    format!("{} {}", location.radius, RADIUS_UNIT),
+                    true,
+                )
+                .url(format!(
+                    "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                    OSM_ZOOM_LEVEL, location.latitude, location.longitude
+                ));
+            if let Some(regex) = &location.regex {
+                embed = embed.field("Regex", regex.as_str().replace('*', "\\*"), true);
+            }
+            embed = embed.field("Active", if is_active { "✅" } else { "❌" }, true);
+            let message = CreateMessage::new().add_embed(embed);
+            msg.channel_id.send_message(&ctx.http, message).await?;
         } else {
             msg.reply(ctx, "There was a problem registering the radius (location)")
                 .await?;
@@ -314,7 +299,7 @@ async fn quit(ctx: &Context, msg: &Message) -> CommandResult {
     let data = ctx.data.read().await;
     if let Some(manager) = data.get::<ShardManagerContainer>() {
         msg.reply(ctx, "Shutting down!").await?;
-        manager.lock().await.shutdown_all().await;
+        manager.shutdown_all().await;
     } else {
         msg.reply(ctx, "There was a problem with quitting (shard manager)")
             .await?;

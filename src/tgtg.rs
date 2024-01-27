@@ -5,7 +5,7 @@ use pyo3::types::{IntoPyDict, PyTuple};
 use serde::Deserialize;
 use tracing::info;
 
-use crate::{TGTGConfig, TGTGBindings};
+use crate::{TGTGBindings, TGTGConfig};
 
 pub(crate) fn check_python() -> PyResult<()> {
     Python::with_gil(|py| {
@@ -41,7 +41,7 @@ def get_client(access_token, refresh_token, user_id, cookie):
         )?
         .getattr("get_client")?
         .into();
-        let args = PyTuple::new(py, &[&access_token, &refresh_token, &user_id, &cookie]);
+        let args = PyTuple::new(py, [&access_token, &refresh_token, &user_id, &cookie]);
         let ret: PyObject = tgtg_client_fun.call1(py, args)?;
         Ok(ret)
     })
@@ -71,22 +71,19 @@ def fetch_items(client, latitude, longitude, radius):
     })
 }
 
-fn py_get_items(
-    tgtg: &TGTGBindings,
-    config: &TGTGConfig,
-) -> PyResult<String> {
+fn py_get_items(tgtg: &TGTGBindings, config: &TGTGConfig) -> PyResult<String> {
     Python::with_gil(|py| {
         let client = tgtg.client.extract(py)?;
         let params = PyTuple::new(
             py,
-            &[
+            [
                 &format!("{:.5}", config.latitude),
                 &format!("{:.5}", config.longitude),
                 &format!("{}", config.radius),
             ],
         )
         .as_slice();
-        let args = PyTuple::new(py, &[client, params[0], params[1], params[2]]);
+        let args = PyTuple::new(py, [client, params[0], params[1], params[2]]);
         let ret = tgtg.fetch_func.call1(py, args)?;
         let items = ret.extract::<String>(py)?;
         Ok(items)

@@ -1,5 +1,8 @@
 use anyhow::Context;
 use chrono::Utc;
+use serenity::builder::CreateEmbed;
+use serenity::builder::CreateMessage;
+use serenity::builder::EditMessage;
 use serenity::prelude::RwLock;
 use serenity::prelude::TypeMap;
 use serenity::{http::Http, model::id::ChannelId};
@@ -13,7 +16,7 @@ use crate::TGTGBindings;
 use crate::TGTGConfigContainer;
 use crate::OSM_ZOOM_LEVEL;
 use crate::RADIUS_UNIT;
-use crate::{TGTGConfig, ItemMessage, TGTGBindingsContainer, TGTGItemMessageContainer};
+use crate::{ItemMessage, TGTGBindingsContainer, TGTGConfig, TGTGItemMessageContainer};
 
 const MONITOR_INTERVAL: u64 = 60;
 
@@ -89,7 +92,7 @@ async fn update_location(
     config: &TGTGConfig,
 ) -> anyhow::Result<()> {
     let client_data_rw = client_data.write().await;
-    let items = crate::tgtg::get_items(&tgtg_credentials, &config)?;
+    let items = crate::tgtg::get_items(&tgtg_credentials, config)?;
     info!(
         "Channel {}: Monitor found {} items",
         channel_id,
@@ -125,60 +128,54 @@ async fn update_location(
             .is_some()
             && i.items_available > 0
         {
+            // Construct a new message embed with quantity and date to post or update
+            let mut embed = CreateEmbed::new()
+                .title(i.store.store_name)
+                .description(i.display_name)
+                .field(
+                    "Price",
+                    format!(
+                        "{:.2} {}",
+                        i.item.price_including_taxes.minor_units as f64
+                            / 10u32.pow(i.item.price_including_taxes.decimals) as f64,
+                        i.item.price_including_taxes.code
+                    ),
+                    true,
+                )
+                .field("Quantity", format!("{}", i.items_available), true)
+                .field(
+                    "Distance",
+                    format!("{:.2} {}", i.distance, RADIUS_UNIT),
+                    true,
+                )
+                .image(i.store.logo_picture.current_url)
+                .url(format!(
+                    "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
+                    OSM_ZOOM_LEVEL,
+                    i.pickup_location.location.latitude,
+                    i.pickup_location.location.longitude
+                ));
+            if let Some(interval) = i.pickup_interval {
+                let timezone = i.store.store_time_zone;
+                embed = embed.field(
+                    "Pickup interval",
+                    format!(
+                        "{} - {}",
+                        interval
+                            .start
+                            .with_timezone(&timezone)
+                            .format("%a %H:%M %Z"),
+                        interval.end.with_timezone(&timezone).format("%a %H:%M %Z")
+                    ),
+                    true,
+                );
+            }
             if let Some(item_message) = item_message {
                 // Update the message with the new quantity
                 if item_message.quantity != i.items_available {
+                    let builder = EditMessage::new().embed(embed);
                     channel_id
-                        .edit_message(&http, item_message.message_id, |m| {
-                            m.embed(|e| {
-                                e.title(i.store.store_name);
-                                e.description(i.display_name);
-                                e.field(
-                                    "Price",
-                                    format!(
-                                        "{:.2} {}",
-                                        i.item.price_including_taxes.minor_units as f64
-                                            / 10u32.pow(i.item.price_including_taxes.decimals)
-                                                as f64,
-                                        i.item.price_including_taxes.code
-                                    ),
-                                    true,
-                                );
-                                e.field("Quantity", i.items_available, true);
-                                if let Some(interval) = i.pickup_interval {
-                                    let timezone = i.store.store_time_zone;
-                                    e.field(
-                                        "Pickup interval",
-                                        format!(
-                                            "{} - {}",
-                                            interval
-                                                .start
-                                                .with_timezone(&timezone)
-                                                .format("%a %H:%M %Z"),
-                                            interval
-                                                .end
-                                                .with_timezone(&timezone)
-                                                .format("%a %H:%M %Z")
-                                        ),
-                                        true,
-                                    );
-                                }
-                                e.field(
-                                    "Distance",
-                                    format!("{:.2} {}", i.distance, RADIUS_UNIT),
-                                    true,
-                                );
-                                e.image(i.store.logo_picture.current_url);
-                                e.url(format!(
-                                    "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-                                    OSM_ZOOM_LEVEL,
-                                    i.pickup_location.location.latitude,
-                                    i.pickup_location.location.longitude
-                                ));
-                                e
-                            });
-                            m
-                        })
+                        .edit_message(&http, item_message.message_id, builder)
                         .await?;
                     let mut item_map = client_data_rw
                         .get::<TGTGItemMessageContainer>()
@@ -195,54 +192,8 @@ async fn update_location(
                 }
             } else {
                 // We have quantity available, post a new message
-                let msg = channel_id
-                    .send_message(&http, |m| {
-                        m.embed(|e| {
-                            e.title(i.store.store_name);
-                            e.description(i.display_name);
-                            e.field(
-                                "Price",
-                                format!(
-                                    "{:.2} {}",
-                                    i.item.price_including_taxes.minor_units as f64
-                                        / 10u32.pow(i.item.price_including_taxes.decimals) as f64,
-                                    i.item.price_including_taxes.code
-                                ),
-                                true,
-                            );
-                            e.field("Quantity", i.items_available, true);
-                            if let Some(interval) = i.pickup_interval {
-                                let timezone = i.store.store_time_zone;
-                                e.field(
-                                    "Pickup interval",
-                                    format!(
-                                        "{} - {}",
-                                        interval
-                                            .start
-                                            .with_timezone(&timezone)
-                                            .format("%a %H:%M %Z"),
-                                        interval.end.with_timezone(&timezone).format("%a %H:%M %Z")
-                                    ),
-                                    true,
-                                );
-                            }
-                            e.field(
-                                "Distance",
-                                format!("{:.2} {}", i.distance, RADIUS_UNIT),
-                                true,
-                            );
-                            e.image(i.store.logo_picture.current_url);
-                            e.url(format!(
-                                "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-                                OSM_ZOOM_LEVEL,
-                                i.pickup_location.location.latitude,
-                                i.pickup_location.location.longitude
-                            ));
-                            e
-                        });
-                        m
-                    })
-                    .await?;
+                let builder = CreateMessage::new().add_embed(embed);
+                let msg = channel_id.send_message(&http, builder).await?;
                 let mut item_map_write = client_data_rw
                     .get::<TGTGItemMessageContainer>()
                     .context("Item message missing")?

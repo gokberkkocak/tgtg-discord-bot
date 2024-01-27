@@ -18,8 +18,11 @@ use pyo3::PyObject;
 use regex::Regex;
 use serenity::{
     async_trait,
-    client::bridge::gateway::ShardManager,
-    framework::{standard::macros::group, StandardFramework},
+    framework::{
+        standard::{macros::group, Configuration},
+        StandardFramework,
+    },
+    gateway::ShardManager,
     http::Http,
     model::{
         event::ResumedEvent,
@@ -35,7 +38,7 @@ static RADIUS_UNIT: &str = "km";
 pub struct ShardManagerContainer;
 
 impl TypeMapKey for ShardManagerContainer {
-    type Value = Arc<Mutex<ShardManager>>;
+    type Value = Arc<ShardManager>;
 }
 
 pub struct TGTGConfigContainer;
@@ -156,16 +159,17 @@ async fn main() -> anyhow::Result<()> {
     let (owners, _bot_id) = match http.get_current_application_info().await {
         Ok(info) => {
             let mut owners = HashSet::new();
-            owners.insert(info.owner.id);
-
-            (owners, info.id)
+            if let Some(team) = info.team {
+                owners.insert(team.owner_user_id);
+            } else if let Some(owner) = &info.owner {
+                owners.insert(owner.id);
+            }
+            match http.get_current_user().await {
+                Ok(bot_id) => (owners, bot_id.id),
+                Err(why) => panic!("Could not access the bot id: {:?}", why),
+            }
         }
-        Err(why) => {
-            return Err(anyhow::anyhow!(
-                "Could not access application info: {:?}",
-                why
-            ));
-        }
+        Err(why) => panic!("Could not access application info: {:?}", why),
     };
 
     // Bot DB
@@ -173,9 +177,9 @@ async fn main() -> anyhow::Result<()> {
     let (location_map, active_set) = bot_db.get_locations().await?;
 
     // Create the framework
-    let framework = StandardFramework::new()
-        .configure(|c| c.owners(owners).prefix("tg!"))
-        .group(&GENERAL_GROUP);
+    let framework = StandardFramework::new().group(&GENERAL_GROUP);
+
+    framework.configure(Configuration::new().prefix("tg!").owners(owners));
 
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
@@ -190,7 +194,7 @@ async fn main() -> anyhow::Result<()> {
     let active_set_rw = Arc::new(RwLock::new(active_set));
     {
         let mut data = client.data.write().await;
-        data.insert::<ShardManagerContainer>(client.shard_manager.clone());
+        data.insert::<ShardManagerContainer>(Arc::clone(&client.shard_manager));
         data.insert::<TGTGConfigContainer>(location_map_rw.clone());
         data.insert::<TGTGActiveChannelsContainer>(active_set_rw.clone());
         data.insert::<TGTGItemMessageContainer>(Arc::new(RwLock::new(HashMap::new())));
@@ -204,17 +208,17 @@ async fn main() -> anyhow::Result<()> {
         tokio::signal::ctrl_c()
             .await
             .expect("Could not register ctrl+c handler");
-        shard_manager.lock().await.shutdown_all().await;
+        shard_manager.shutdown_all().await;
     });
 
     // Start monitoring task already on db
     let data = client.data.clone();
-    let http = client.cache_and_http.http.clone();
+    let http = client.http.clone();
     tokio::spawn(async move {
         // wait 10 secs first to let the bot connect to discord
         tokio::time::sleep(Duration::from_secs(10)).await;
         for (channel_id, _config) in location_map_rw.read().await.iter() {
-            if active_set_rw.read().await.contains(&channel_id) {
+            if active_set_rw.read().await.contains(channel_id) {
                 crate::monitor::monitor_location(data.clone(), http.clone(), *channel_id).await;
                 info!("Channel {}: Monitor starting (DB) ", channel_id)
             }
