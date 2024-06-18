@@ -9,11 +9,11 @@ use crate::{TGTGBindings, TGTGConfig};
 
 pub(crate) fn check_python() -> PyResult<()> {
     Python::with_gil(|py| {
-        let sys = py.import("sys")?;
+        let sys = py.import_bound("sys")?;
         let version: String = sys.getattr("version")?.extract()?;
-        let locals = [("os", py.import("os")?)].into_py_dict(py);
+        let locals = [("os", py.import_bound("os")?)].into_py_dict_bound(py);
         let code = "os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'";
-        let user: String = py.eval(code, None, Some(locals))?.extract()?;
+        let user: String = py.eval_bound(code, None, Some(&locals))?.extract()?;
         info!(
             "Python status OK! Running user: {}, Python version: {}",
             user, version
@@ -29,7 +29,7 @@ pub fn init_client(
     cookie: &str,
 ) -> PyResult<PyObject> {
     Python::with_gil(|py| {
-        let tgtg_client_fun: Py<PyAny> = PyModule::from_code(
+        let tgtg_client_fun: Py<PyAny> = PyModule::from_code_bound(
             py,
             "
 from tgtg import TgtgClient
@@ -41,7 +41,7 @@ def get_client(access_token, refresh_token, user_id, cookie):
         )?
         .getattr("get_client")?
         .into();
-        let args = PyTuple::new(py, [&access_token, &refresh_token, &user_id, &cookie]);
+        let args = PyTuple::new_bound(py, [&access_token, &refresh_token, &user_id, &cookie]);
         let ret: PyObject = tgtg_client_fun.call1(py, args)?;
         Ok(ret)
     })
@@ -49,7 +49,7 @@ def get_client(access_token, refresh_token, user_id, cookie):
 
 pub fn init_fetch_func() -> PyResult<PyObject> {
     Python::with_gil(|py| {
-        let func = PyModule::from_code(
+        let func = PyModule::from_code_bound(
             py,
             "
 import json
@@ -74,16 +74,23 @@ def fetch_items(client, latitude, longitude, radius):
 fn py_get_items(tgtg: &TGTGBindings, config: &TGTGConfig) -> PyResult<String> {
     Python::with_gil(|py| {
         let client = tgtg.client.extract(py)?;
-        let params = PyTuple::new(
+        let params = PyTuple::new_bound(
             py,
             [
-                &format!("{:.5}", config.latitude),
-                &format!("{:.5}", config.longitude),
-                &format!("{}", config.radius),
+                format!("{:.5}", config.latitude),
+                format!("{:.5}", config.longitude),
+                format!("{}", config.radius),
             ],
-        )
-        .as_slice();
-        let args = PyTuple::new(py, [client, params[0], params[1], params[2]]);
+        );
+        let args = PyTuple::new_bound(
+            py,
+            [
+                client,
+                params.get_item(0)?,
+                params.get_item(1)?,
+                params.get_item(2)?,
+            ],
+        );
         let ret = tgtg.fetch_func.call1(py, args)?;
         let items = ret.extract::<String>(py)?;
         Ok(items)
@@ -162,7 +169,7 @@ mod test {
     #[test]
     fn test_tgtg_module() -> PyResult<()> {
         Python::with_gil(|py| {
-            py.import("tgtg")?;
+            py.import_bound("tgtg")?;
             Ok(())
         })
     }
