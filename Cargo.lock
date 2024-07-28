@@ -262,17 +262,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "command_attr"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88da8d7e9fe6f30d8e3fcf72d0f84102b49de70fece952633e8439e89bdc7631"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1108,12 +1097,6 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 dependencies = [
  "spin 0.5.2",
 ]
-
-[[package]]
-name = "levenshtein"
-version = "1.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db13adb97ab515a3691f56e4dbab09283d0b86cb45abd991d8634a9d6f501760"
 
 [[package]]
 name = "libc"
@@ -2065,12 +2048,10 @@ dependencies = [
  "bitflags 2.5.0",
  "bytes",
  "chrono",
- "command_attr",
  "dashmap",
  "flate2",
  "futures",
  "fxhash",
- "levenshtein",
  "mime_guess",
  "parking_lot",
  "percent-encoding",
@@ -2079,7 +2060,6 @@ dependencies = [
  "serde",
  "serde_cow",
  "serde_json",
- "static_assertions",
  "time",
  "tokio",
  "tokio-tungstenite",
@@ -2087,7 +2067,6 @@ dependencies = [
  "typemap_rev",
  "typesize",
  "url",
- "uwl",
 ]
 
 [[package]]
@@ -2422,12 +2401,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
-name = "static_assertions"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
 name = "stringprep"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2536,7 +2509,7 @@ dependencies = [
 
 [[package]]
 name = "tgtg-discord-bot"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2547,7 +2520,6 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "serenity",
  "sqlx",
  "tokio",
  "tracing",
@@ -2963,12 +2935,6 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
-
-[[package]]
-name = "uwl"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4bf03e0ca70d626ecc4ba6b0763b934b6f2976e8c744088bb3c1d646fbb1ad0"
 
 [[package]]
 name = "valuable"

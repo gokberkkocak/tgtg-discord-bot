@@ -1,11 +1,8 @@
-use chrono::{DateTime, Utc};
-use chrono_tz::Tz;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyTuple};
-use serde::Deserialize;
 use tracing::info;
 
-use crate::{TGTGBindings, TGTGConfig};
+use crate::data::{TGTGBindings, TGTGConfig, TGTGListing};
 
 pub(crate) fn check_python() -> PyResult<()> {
     Python::with_gil(|py| {
@@ -104,57 +101,6 @@ pub fn get_items(
     let py_items = py_get_items(tgtg_credentials, config)?;
     let items: Vec<TGTGListing> = serde_json::from_str(&py_items)?;
     Ok(items)
-}
-#[derive(Debug, Deserialize)]
-pub struct TGTGListing {
-    pub item: Item,
-    pub store: Store,
-    pub display_name: String,
-    pub items_available: usize,
-    pub distance: f64,
-    pub pickup_location: PickupLocation,
-    pub pickup_interval: Option<PickupInterval>,
-    pub purchase_end: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Item {
-    pub item_id: String,
-    pub price_including_taxes: ItemPrice,
-}
-#[derive(Debug, Deserialize)]
-pub struct ItemPrice {
-    pub code: String,
-    pub minor_units: u32,
-    pub decimals: u32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Store {
-    pub store_name: String,
-    pub logo_picture: Logo,
-    pub store_time_zone: Tz,
-}
-#[derive(Debug, Deserialize)]
-pub struct Logo {
-    pub current_url: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PickupInterval {
-    pub start: DateTime<Utc>,
-    pub end: DateTime<Utc>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PickupLocation {
-    pub location: Location,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Location {
-    pub latitude: f64,
-    pub longitude: f64,
 }
 
 #[cfg(test)]
