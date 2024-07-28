@@ -56,7 +56,6 @@ applications.commands
 Send messages
 Manage messages
 Embed links
-Add reactions
 ```
 
 ### Privileged Gateway Intents
