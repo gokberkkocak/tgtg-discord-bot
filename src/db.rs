@@ -4,11 +4,12 @@ use std::{
 };
 
 use anyhow::Result;
+use poise::serenity_prelude as serenity;
 use regex::Regex;
 use serenity::model::id::ChannelId;
 use sqlx::SqlitePool;
 
-use crate::TGTGConfig;
+use crate::data::TGTGConfig;
 
 pub struct BotDB {
     pool: SqlitePool,
