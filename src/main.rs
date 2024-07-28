@@ -1,5 +1,6 @@
 mod commands;
 mod db;
+mod discord;
 mod monitor;
 mod tgtg;
 
@@ -14,6 +15,7 @@ use std::{
 };
 
 use commands::*;
+use discord::framework::DiscordClient;
 use pyo3::PyObject;
 use regex::Regex;
 use serenity::{
@@ -110,6 +112,14 @@ impl TypeMapKey for BotDBContainer {
     type Value = Arc<db::BotDB>;
 }
 
+struct DiscordData {
+    bot_db: Arc<db::BotDB>,
+    active_channels: Arc<RwLock<HashSet<ChannelId>>>,
+    tgtg_bindings: Arc<TGTGBindings>,
+    tgtg_config: Arc<RwLock<HashMap<ChannelId, TGTGConfig>>>,
+    tgtg_messages: Arc<RwLock<HashMap<ChannelId, TGTGConfig>>>,
+}
+
 struct Handler;
 
 #[async_trait]
@@ -153,83 +163,96 @@ async fn main() -> anyhow::Result<()> {
         fetch_func: crate::tgtg::init_fetch_func()?,
     });
 
-    let http = Http::new(&discord_token);
+    // let http = Http::new(&discord_token);
 
     // We will fetch your bot's owners and id
-    let (owners, _bot_id) = match http.get_current_application_info().await {
-        Ok(info) => {
-            let mut owners = HashSet::new();
-            if let Some(team) = info.team {
-                owners.insert(team.owner_user_id);
-            } else if let Some(owner) = &info.owner {
-                owners.insert(owner.id);
-            }
-            match http.get_current_user().await {
-                Ok(bot_id) => (owners, bot_id.id),
-                Err(why) => {
-                    anyhow::bail!("Could not access the bot id: {:?}", why)
-                }
-            }
-        }
-        Err(why) => {
-            anyhow::bail!("Could not access application info: {:?}", why)
-        }
-    };
+    // let (owners, _bot_id) = match http.get_current_application_info().await {
+    //     Ok(info) => {
+    //         let mut owners = HashSet::new();
+    //         if let Some(team) = info.team {
+    //             owners.insert(team.owner_user_id);
+    //         } else if let Some(owner) = &info.owner {
+    //             owners.insert(owner.id);
+    //         }
+    //         match http.get_current_user().await {
+    //             Ok(bot_id) => (owners, bot_id.id),
+    //             Err(why) => {
+    //                 anyhow::bail!("Could not access the bot id: {:?}", why)
+    //             }
+    //         }
+    //     }
+    //     Err(why) => {
+    //         anyhow::bail!("Could not access application info: {:?}", why)
+    //     }
+    // };
 
     // Bot DB
     let bot_db = Arc::new(db::BotDB::new(&db_url).await?);
     let (location_map, active_set) = bot_db.get_locations().await?;
 
     // Create the framework
-    let framework = StandardFramework::new().group(&GENERAL_GROUP);
+    // let framework = StandardFramework::new().group(&GENERAL_GROUP);
 
-    framework.configure(Configuration::new().prefix("tg!").owners(owners));
+    // framework.configure(Configuration::new().prefix("tg!").owners(owners));
 
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
 
-    let mut client = Client::builder(&discord_token, intents)
-        .event_handler(Handler)
-        .framework(framework)
-        .await?;
+    // let mut client = Client::builder(&discord_token, intents)
+    //     .event_handler(Handler)
+    //     .framework(framework)
+    //     .await?;
 
     let location_map_rw = Arc::new(RwLock::new(location_map));
     let active_set_rw = Arc::new(RwLock::new(active_set));
-    {
-        let mut data = client.data.write().await;
-        data.insert::<ShardManagerContainer>(Arc::clone(&client.shard_manager));
-        data.insert::<TGTGConfigContainer>(location_map_rw.clone());
-        data.insert::<TGTGActiveChannelsContainer>(active_set_rw.clone());
-        data.insert::<TGTGItemMessageContainer>(Arc::new(RwLock::new(HashMap::new())));
-        data.insert::<TGTGBindingsContainer>(tgtg_credentials.clone());
-        data.insert::<BotDBContainer>(bot_db);
-    }
+    // {
+    //     let mut data = client.data.write().await;
+    //     data.insert::<ShardManagerContainer>(Arc::clone(&client.shard_manager));
+    //     data.insert::<TGTGConfigContainer>(location_map_rw.clone());
+    //     data.insert::<TGTGActiveChannelsContainer>(active_set_rw.clone());
+    //     data.insert::<TGTGItemMessageContainer>(Arc::new(RwLock::new(HashMap::new())));
+    //     data.insert::<TGTGBindingsContainer>(tgtg_credentials.clone());
+    //     data.insert::<BotDBContainer>(bot_db);
+    // }
 
-    let shard_manager = client.shard_manager.clone();
+    // let shard_manager = client.shard_manager.clone();
 
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Could not register ctrl+c handler");
-        shard_manager.shutdown_all().await;
-    });
+    // tokio::spawn(async move {
+    //     tokio::signal::ctrl_c()
+    //         .await
+    //         .expect("Could not register ctrl+c handler");
+    //     shard_manager.shutdown_all().await;
+    // });
 
     // Start monitoring task already on db
-    let data = client.data.clone();
-    let http = client.http.clone();
-    tokio::spawn(async move {
-        // wait 10 secs first to let the bot connect to discord
-        tokio::time::sleep(Duration::from_secs(10)).await;
-        for (channel_id, _config) in location_map_rw.read().await.iter() {
-            if active_set_rw.read().await.contains(channel_id) {
-                crate::monitor::monitor_location(data.clone(), http.clone(), *channel_id).await;
-                info!("Channel {}: Monitor starting (DB) ", channel_id)
-            }
-        }
-    });
+    // let data = client.data.clone();
+    // let http = client.http.clone();
 
-    if let Err(why) = client.start().await {
+    // let active_channels
+
+    let dc_data = DiscordData {
+        bot_db,
+        active_channels: active_set_rw,
+        tgtg_bindings: tgtg_credentials,
+        tgtg_config: location_map_rw,
+        tgtg_messages: Arc::new(RwLock::new(HashMap::new())),
+    };
+
+    let mut client = DiscordClient::new(&discord_token, intents, dc_data).await?;
+
+    // tokio::spawn(async move {
+    //     // wait 10 secs first to let the bot connect to discord
+    //     tokio::time::sleep(Duration::from_secs(10)).await;
+    //     for (channel_id, _config) in location_map_rw.read().await.iter() {
+    //         if active_set_rw.read().await.contains(channel_id) {
+    //             // crate::monitor::monitor_location(data.clone(), http.clone(), *channel_id).await;
+    //             info!("Channel {}: Monitor starting (DB) ", channel_id)
+    //         }
+    //     }
+    // });
+
+    if let Err(why) = client.client.start().await {
         error!("Client error: {:?}", why);
     }
     Ok(())
