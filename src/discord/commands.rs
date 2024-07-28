@@ -8,7 +8,7 @@ use crate::data::{TGTGConfig, OSM_ZOOM_LEVEL, RADIUS_UNIT};
 
 use super::{Context, Error};
 
-/// Check the bot
+/// Check the bot if it's ready to work
 #[poise::command[prefix_command, slash_command]]
 pub async fn health(ctx: Context<'_>) -> Result<(), Error> {
     info!("Channel {}: Health check recieved.", ctx.channel_id());
@@ -129,7 +129,7 @@ async fn radius(
     Ok(())
 }
 
-// Sets the location with given radius with regex filter
+/// Sets the location with given radius with regex filter
 #[poise::command[prefix_command, slash_command]]
 async fn full(
     ctx: Context<'_>,

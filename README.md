@@ -67,24 +67,19 @@ Message Content Intent
 
 ## Bot Usage
 
-Available bot commands:
-```
-tg!location <latitude> <longitude>
-tg!radius <radius in km>
-tg!regex <regular expression to filter bags>
-tg!start
-tg!stop
-tg!status
-tg!quit
-```
+Available commands can be seen with the / usage. Here's a screenshot below.
+
+![Commands](images/slash_commands.png)
 
 You should register the location as the first command to be able use the bot. You can retrieve the wanted location's latitude and longitude on OpenStreetMaps' address bar or on Google Maps' context menu. Setting a radius is optional. It defaults to 3 km. 
 
 ### Example - Setting a location
 
-![Location](images/location.png)
+![Location entry](images/location_entry.png)
 
 The bot responds with a message to confirm.
+
+![Location confirm](images/location_confirm.png)
 
 ### Example - Starting
 
