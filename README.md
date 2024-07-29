@@ -10,7 +10,7 @@ Use the release binaries or check the compile section at the bottom.
 
 You will need a Discord API Token and TGTG credentials. 
 - For Discord, you can go [here](https://discord.com/developers/applications) and create a bot retrieve its token.
-- For TGTG, the system uses unofficial TGTG api from [here](https://github.com/ahivert/tgtg-python). Check retrieve tokens section and retrieve your access token, refresh token and user id.
+- For TGTG, the system uses unofficial TGTG api from [here](https://github.com/ahivert/tgtg-python). Check retrieve tokens section and retrieve your access token, refresh token, user id and cookie.
 
 Once you have the necessary token, put them into your environment variables (or .env file). 
 
@@ -66,7 +66,7 @@ Message Content Intent
 
 ## Bot Usage
 
-Available commands can be seen with the / usage. Here's a screenshot below.
+Available commands can be seen with the `/` usage.
 
 ![Commands](images/slash_commands.png)
 
@@ -84,19 +84,19 @@ The bot responds with a message to confirm.
 
 ![Start](images/start.png)
 
-The bot acknowledges the command with a reaction. This applies to stop as well.
+The bot acknowledges the command with a reply. This applies to stop as well.
 
 ### Example - Status
 
 ![Start](images/status.png)
 
-The bot responds with the confirmation of the  location and its monitoring status.
+The bot responds with the confirmation of the location and its monitoring status.
 
 ### Example - Listing
 
 ![Listing](images/listing.png)
 
-The listing includes price, quantity and distance. The bot automatically updates if the quantity changes or deletes it if the item is not available anymore.
+The listing includes price, quantity, distance and the pickup interval time. If you click the listing, you will be redirected to OSM for the store location. The bot automatically updates if the quantity changes or deletes it if the item is not available anymore.
 
 ## Compilation
 
