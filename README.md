@@ -109,6 +109,19 @@ pip install -r requirements.txt
 cargo b --release
 ```
 
+### Cross-compiling for arm
+
+You can use the supplied cross-compilation docker images `Dockerfile.arm64` and `Dockerfile.armhf` to build and extract binaries.
+
+Example for arm64:
+
+```bash
+docker build --target builder -t tgtg_arm64 -f Dockerfile.arm64 .
+docker create --name dummy_tgtg_arm64 localhost/tgtg_arm64:latest
+docker cp dummy_tgtg_arm64:"/app/bin/*" .
+```
+
+
 ## Systemctl service
 
 You can use the provided ```systemd``` service file to run the bot as a service. 
