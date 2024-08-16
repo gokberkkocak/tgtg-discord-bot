@@ -1,0 +1,43 @@
+FROM debian:bookworm AS builder
+
+WORKDIR /app
+
+COPY ./ ./
+
+RUN dpkg --add-architecture armhf
+RUN apt update
+RUN apt upgrade -y
+RUN apt install -y build-essential curl libssl-dev pkg-config sqlite3 python3 libpython3-dev crossbuild-essential-armhf libssl-dev:armhf libpython3-dev:armhf
+
+ENV PKG_CONFIG_PATH /usr/lib/aarch64-linux-gnu/pkgconfig/
+ENV PKG_CONFIG_ALLOW_CROSS 1
+
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup target add arm-unknown-linux-gnueabihf
+RUN mkdir /.cargo && \
+    echo '[target.arm-unknown-linux-gnueabihf]\nlinker = "arm-linux-gnueabihf-gcc"' >> /.cargo/config.toml
+
+ENV DATABASE_URL=sqlite:bot.db
+RUN sqlite3 bot.db < migrations/20220301134633_bot.sql 
+
+ENV PYO3_CROSS_PYTHON_VERSION 3.11
+ENV PYO3_CROSS_LIB_DIR /usr/lib/python3.11
+
+RUN mkdir -p /app/bin
+RUN cargo build --release --target arm-unknown-linux-gnueabihf
+RUN mv ./target/arm-unknown-linux-gnueabihf/release /app/bin/tgtg-discord-bot
+
+FROM debian:bookworm as runner
+
+COPY requirements.txt /
+COPY --from=builder /app/bin/tgtg-discord-bot /usr/bin/
+
+RUN dpkg --add-architecture armhf
+RUN apt update
+RUN apt upgrade -y
+RUN apt install -y python3 python3-pip libpython3-dev libpython3-dev:armhf
+
+RUN pip install -r requirements.txt --break-system-packages
+
+ENTRYPOINT [ "tgtg-discord-bot" ]
