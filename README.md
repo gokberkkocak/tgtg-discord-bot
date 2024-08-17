@@ -121,6 +121,21 @@ docker create --name dummy_tgtg_arm64 localhost/tgtg_arm64:latest
 docker cp dummy_tgtg_arm64:"/app/bin/*" .
 ```
 
+## Docker
+
+You can use the docker image for amd64.
+
+```bash
+docker pull gokberkkocak/tgtg-discord-bot
+```
+
+Alternatively, github packages image is also available.
+
+Afterwards you can run the container while supplying necessary env variables like below.
+
+```bash
+docker run -d --env-file .env gokberkkocak/tgtg-discord-bot:latest 
+```
 
 ## Systemctl service
 
@@ -150,4 +165,4 @@ You can change the RUST_LOG environment variable to ```info``` to store more det
 
 ## Why Rust-Python Bridge
 
-While the unofficial tgtg API is only available on Python, there are plenty of discord API targetting libraries in various languages. The main reason this project uses Rust on top of tgtg python api is that I wanted to try out ```pyo3``` framework which bridges python land with rust. I found the framework very flexible. The second reason is to try a discord library in rust language. For this purpose, I used the ```serenity``` crate for discord which seems powerful. 
+While the unofficial tgtg API is only available on Python, there are plenty of discord API targetting libraries in various languages. The main reason this project uses Rust on top of tgtg python api is that I wanted to try out ```pyo3``` framework which bridges python land with rust. I found the framework very flexible. The second reason is to try a discord library in rust language. For this purpose, ```serenity``` / ```poise``` discord api wrappers on rust ecosystem seems very powerful and makes it easy to plan around memory-safe concurrent data usage with tokio async runtime. 
