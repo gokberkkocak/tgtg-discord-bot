@@ -21,7 +21,6 @@ pub static OSM_ZOOM_LEVEL: u8 = 15;
 pub struct ItemMessage {
     pub message_id: MessageId,
     pub quantity: usize,
-    pub channel_id: ChannelId,
 }
 
 #[derive(Clone)]
@@ -73,7 +72,7 @@ pub struct DiscordData {
     pub active_channels: Arc<RwLock<HashSet<ChannelId>>>,
     pub tgtg_bindings: Arc<TGTGBindings>,
     pub tgtg_configs: Arc<RwLock<HashMap<ChannelId, TGTGConfig>>>,
-    pub tgtg_messages: Arc<RwLock<HashMap<String, ItemMessage>>>,
+    pub tgtg_messages: Arc<RwLock<HashMap<ChannelId, HashMap<String, ItemMessage>>>>,
 }
 
 #[derive(Debug, Deserialize)]
