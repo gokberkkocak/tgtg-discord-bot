@@ -237,7 +237,7 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
         ctx.data().tgtg_messages.clone(),
     )
     .await;
-    ctx.reply("Starting now!").await?;
+    ctx.reply("Started monitoring!").await?;
     info!("Channel {}: Monitor starting", ctx.channel_id());
 
     Ok(())
@@ -252,9 +252,13 @@ pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
     active_channels.remove(&ctx.channel_id());
 
     let bot_db = &ctx.data().bot_db;
-
     bot_db.change_active(ctx.channel_id(), false).await?;
-    ctx.reply("Stopping now!").await?;
+
+    let item_messages = &ctx.data().tgtg_messages;
+    let mut item_messages = item_messages.write().await;
+    item_messages.retain(|_, v| v.channel_id != ctx.channel_id());
+
+    ctx.reply("Stopped monitoring!").await?;
     info!("Channel {}: Monitor stopping", ctx.channel_id());
 
     Ok(())

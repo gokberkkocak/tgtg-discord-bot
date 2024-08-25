@@ -164,6 +164,7 @@ async fn update_location(
                         ItemMessage {
                             message_id: item_message.message_id,
                             quantity: i.items_available,
+                            channel_id
                         },
                     );
                 }
@@ -177,6 +178,7 @@ async fn update_location(
                     ItemMessage {
                         message_id: msg.id,
                         quantity: i.items_available,
+                        channel_id
                     },
                 );
             }
