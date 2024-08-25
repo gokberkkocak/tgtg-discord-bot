@@ -262,23 +262,21 @@ pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
     let mut item_messages = item_messages.write().await;
 
     // delete any posted messages
-    stream::iter(item_messages.iter())
-        .filter_map(|(_k, i)| async {
-            if i.channel_id == ctx.channel_id() {
-                Some(i.message_id)
-            } else {
-                None
-            }
-        })
-        .map(|i| async move { ctx.channel_id().delete_message(&ctx.http(), i).await })
-        .all(|r| async { r.await.is_ok() })
-        .await
-        .then_some(())
-        .context("Could not delete the message from channel")?;
+    if let Some(channel_messages) = item_messages.get(&ctx.channel_id()) {
+        stream::iter(channel_messages.values())
+            .map(|v| async {
+                ctx.channel_id()
+                    .delete_message(&ctx.http(), v.message_id)
+                    .await
+            })
+            .all(|r| async { r.await.is_ok() })
+            .await
+            .then_some(())
+            .context("Could not delete the message from channel")?;
+    };
 
     // delete items from item_messages
-    item_messages.retain(|_, v| v.channel_id != ctx.channel_id());
-
+    item_messages.remove(&ctx.channel_id());
 
     ctx.reply("Stopped monitoring!").await?;
     info!("Channel {}: Monitor stopping", ctx.channel_id());

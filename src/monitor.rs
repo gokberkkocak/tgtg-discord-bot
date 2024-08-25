@@ -27,7 +27,7 @@ pub async fn monitor_location(
     active_channels: Arc<RwLock<HashSet<ChannelId>>>,
     tgtg_bindings: Arc<TGTGBindings>,
     tgtg_configs: Arc<RwLock<HashMap<ChannelId, TGTGConfig>>>,
-    tgtg_messages: Arc<RwLock<HashMap<String, ItemMessage>>>,
+    tgtg_messages: Arc<RwLock<HashMap<ChannelId, HashMap<String, ItemMessage>>>>,
 ) {
     let config = {
         let location_container = tgtg_configs.read().await;
@@ -72,7 +72,7 @@ pub async fn monitor_location(
 
 async fn update_location(
     tgtg_bindings: Arc<TGTGBindings>,
-    tgtg_messages: Arc<RwLock<HashMap<String, ItemMessage>>>,
+    tgtg_messages: Arc<RwLock<HashMap<ChannelId, HashMap<String, ItemMessage>>>>,
     http: Arc<Http>,
     channel_id: ChannelId,
     config: &TGTGConfig,
@@ -87,8 +87,11 @@ async fn update_location(
     for i in items {
         let item_message = {
             let item_map = tgtg_messages.read().await;
-            item_map.get(&i.item.item_id).copied()
-        };
+            let channel_items_map = item_map.get(&channel_id);
+            channel_items_map.map(|m| {
+                m.get(&i.item.item_id).copied()
+            })
+        }.flatten();
         // check regex
         if let Some(regex) = config.regex.as_ref() {
             if !regex.is_match(&i.display_name) {
@@ -158,29 +161,32 @@ async fn update_location(
                     channel_id
                         .edit_message(&http, item_message.message_id, builder)
                         .await?;
-                    let mut item_map = tgtg_messages.write().await;
-                    item_map.insert(
-                        i.item.item_id,
-                        ItemMessage {
-                            message_id: item_message.message_id,
-                            quantity: i.items_available,
-                            channel_id
-                        },
-                    );
+                    let mut channel_items_map = tgtg_messages.write().await;
+                    channel_items_map.entry(channel_id).and_modify(|c| {
+                        c.insert(
+                            i.item.item_id,
+                            ItemMessage {
+                                message_id: item_message.message_id,
+                                quantity: i.items_available,
+                            },
+                        );
+                    });
                 }
             } else {
                 // We have quantity available, post a new message
                 let builder = CreateMessage::new().add_embed(embed);
                 let msg = channel_id.send_message(&http, builder).await?;
-                let mut item_map_write = tgtg_messages.write().await;
-                item_map_write.insert(
-                    i.item.item_id,
-                    ItemMessage {
-                        message_id: msg.id,
-                        quantity: i.items_available,
-                        channel_id
-                    },
-                );
+                let mut channel_items_map = tgtg_messages.write().await;
+                channel_items_map.entry(channel_id).or_default();
+                channel_items_map.entry(channel_id).and_modify(|c| {
+                    c.insert(
+                        i.item.item_id,
+                        ItemMessage {
+                            message_id: msg.id,
+                            quantity: i.items_available,
+                        },
+                    );
+                });
             }
         } else {
             // No quantity or purchase period has passed. Check we posted this item before, if yes delete
@@ -188,8 +194,10 @@ async fn update_location(
                 channel_id
                     .delete_message(&http, item_message.message_id)
                     .await?;
-                let mut item_map_write = tgtg_messages.write().await;
-                item_map_write.remove(&i.item.item_id);
+                let mut channel_items_map = tgtg_messages.write().await;
+                channel_items_map.entry(channel_id).and_modify(|c| {
+                    c.remove(&i.item.item_id);
+                });
             }
         }
     }
