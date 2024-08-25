@@ -5,7 +5,7 @@ mod discord;
 mod monitor;
 mod tgtg;
 
-use std::{collections::HashMap, env, sync::Arc, time::Duration};
+use std::{collections::HashSet, env, sync::Arc, time::Duration};
 
 use data::{DiscordData, TGTGBindings};
 use discord::framework::DiscordClient;
@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
 
-    let active_channels = Arc::new(RwLock::new(active_set));
+    let active_channels = Arc::new(RwLock::new(HashSet::new()));
     let tgtg_bindings = Arc::new(TGTGBindings {
         client: crate::tgtg::init_client(
             &tgtg_access_token,
@@ -53,14 +53,12 @@ async fn main() -> anyhow::Result<()> {
         fetch_func: crate::tgtg::init_fetch_func()?,
     });
     let tgtg_configs = Arc::new(RwLock::new(location_map));
-    let tgtg_messages = Arc::new(RwLock::new(HashMap::new()));
 
     let dc_data = DiscordData {
         bot_db,
         active_channels: active_channels.clone(),
         tgtg_bindings: tgtg_bindings.clone(),
         tgtg_configs: tgtg_configs.clone(),
-        tgtg_messages: tgtg_messages.clone(),
     };
 
     let mut client = DiscordClient::new(&discord_token, intents, dc_data).await?;
@@ -70,17 +68,16 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         // wait 10 secs first to let the bot connect to discord
         tokio::time::sleep(Duration::from_secs(10)).await;
-        for (channel_id, _config) in tgtg_configs.read().await.iter() {
-            if active_channels.read().await.contains(channel_id) {
-                crate::monitor::monitor_location(
+        for (channel_id, config) in tgtg_configs.read().await.iter() {
+            if active_set.contains(channel_id) {
+                let cm = crate::monitor::ChannelMonitor::monitor_location(
                     http.clone(),
                     channel_id.to_owned(),
-                    active_channels.clone(),
                     tgtg_bindings.clone(),
-                    tgtg_configs.clone(),
-                    tgtg_messages.clone(),
-                )
-                .await;
+                    config.to_owned(),
+                );
+                let mut active_channels = active_channels.write().await;
+                active_channels.insert(cm);
                 info!("Channel {}: Monitor starting (DB) ", channel_id)
             }
         }

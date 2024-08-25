@@ -1,8 +1,5 @@
 use anyhow::Context as _;
-use poise::serenity_prelude::{
-    self as serenity,
-    futures::{stream, StreamExt},
-};
+use poise::serenity_prelude::{self as serenity};
 
 use regex::Regex;
 use serenity::all::{CreateEmbed, CreateMessage};
@@ -38,9 +35,11 @@ pub async fn default(
     #[description = "longitude"] longitude: f64,
 ) -> Result<(), Error> {
     let location_map = &ctx.data().tgtg_configs;
-    let bot_db = &ctx.data().bot_db;
     let location = {
-        if let Some(location) = location_map.write().await.get_mut(&ctx.channel_id()) {
+        let exists = location_map.read().await.contains_key(&ctx.channel_id());
+        if exists {
+            let mut lock = location_map.write().await;
+            let location = lock.get_mut(&ctx.channel_id()).context("exists failure")?;
             location.latitude = latitude;
             location.longitude = longitude;
             location.clone()
@@ -53,6 +52,8 @@ pub async fn default(
             location
         }
     };
+    
+    let bot_db = &ctx.data().bot_db;
     bot_db.set_location(ctx.channel_id(), &location).await?;
     info!(
         "Channel {}: Location set ({}, {})",
@@ -93,9 +94,11 @@ async fn radius(
     #[description = "radius"] radius: u8,
 ) -> Result<(), Error> {
     let location_map = &ctx.data().tgtg_configs;
-    let bot_db = &ctx.data().bot_db;
     let location = {
-        if let Some(location) = location_map.write().await.get_mut(&ctx.channel_id()) {
+        let exists = location_map.read().await.contains_key(&ctx.channel_id());
+        if exists {
+            let mut lock = location_map.write().await;
+            let location = lock.get_mut(&ctx.channel_id()).context("exists failure")?;
             location.latitude = latitude;
             location.longitude = longitude;
             location.radius = radius;
@@ -110,6 +113,7 @@ async fn radius(
         }
     };
 
+    let bot_db = &ctx.data().bot_db;
     bot_db.set_location(ctx.channel_id(), &location).await?;
     info!("Channel {}: Radius set {} ", ctx.channel_id(), radius);
     let mut embed = CreateEmbed::new()
@@ -143,9 +147,11 @@ async fn full(
     #[description = "regex"] regex: String,
 ) -> Result<(), Error> {
     let location_map = &ctx.data().tgtg_configs;
-    let bot_db = &ctx.data().bot_db;
     let location = {
-        if let Some(location) = location_map.write().await.get_mut(&ctx.channel_id()) {
+        let exists = location_map.read().await.contains_key(&ctx.channel_id());
+        if exists {
+            let mut lock = location_map.write().await;
+            let location = lock.get_mut(&ctx.channel_id()).context("exists failure")?;
             location.latitude = latitude;
             location.longitude = longitude;
             location.radius = radius;
@@ -162,6 +168,7 @@ async fn full(
         }
     };
 
+    let bot_db = &ctx.data().bot_db;
     bot_db.set_location(ctx.channel_id(), &location).await?;
     info!("Channel {}: Radius set {} ", ctx.channel_id(), radius);
     let mut embed = CreateEmbed::new()
@@ -188,12 +195,14 @@ async fn full(
 /// Check the status for the current channel
 #[poise::command[prefix_command, slash_command]]
 pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
-    let active_channels = &ctx.data().active_channels;
-    let is_active = active_channels.read().await.contains(&ctx.channel_id());
-
     let location_map = &ctx.data().tgtg_configs;
-
     if let Some(location) = location_map.read().await.get(&ctx.channel_id()) {
+        let active_channels = &ctx.data().active_channels;
+        let is_active = active_channels
+            .read()
+            .await
+            .iter()
+            .any(|c| c.channel_id == ctx.channel_id());
         let mut embed = CreateEmbed::new()
             .title("Monitor Status")
             .description("TooGoodToGo monitor status")
@@ -214,35 +223,37 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
         embed = embed.field("Active", if is_active { "✅" } else { "❌" }, true);
         let message = CreateMessage::new().add_embed(embed);
         ctx.channel_id().send_message(&ctx.http(), message).await?;
+        ctx.reply("Here's the status!").await?;
     } else {
-        ctx.reply("There was a problem registering the radius (location)")
+        ctx.reply("Location is not found!")
             .await?;
     }
-    ctx.reply("Here's the status!").await?;
     Ok(())
 }
 
 /// Start monitoring TGTG for the channel
 #[poise::command[prefix_command, slash_command]]
 pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
-    let active_channels = &ctx.data().active_channels;
-    let bot_db = &ctx.data().bot_db;
-    let mut active_channels = active_channels.write().await;
-    active_channels.insert(ctx.channel_id());
-    bot_db.change_active(ctx.channel_id(), true).await?;
+    if let Some(tgtg_config) = ctx.data().tgtg_configs.read().await.get(&ctx.channel_id()) {
+        let active_channels = &ctx.data().active_channels;
+        let bot_db = &ctx.data().bot_db;
+        bot_db.change_active(ctx.channel_id(), true).await?;
+        let http = ctx.serenity_context().http.clone();
+        let cm = crate::monitor::ChannelMonitor::monitor_location(
+            http,
+            ctx.channel_id(),
+            ctx.data().tgtg_bindings.clone(),
+            tgtg_config.clone(),
+        );
 
-    let http = ctx.serenity_context().http.clone();
-    crate::monitor::monitor_location(
-        http,
-        ctx.channel_id(),
-        ctx.data().active_channels.clone(),
-        ctx.data().tgtg_bindings.clone(),
-        ctx.data().tgtg_configs.clone(),
-        ctx.data().tgtg_messages.clone(),
-    )
-    .await;
-    ctx.reply("Started monitoring!").await?;
-    info!("Channel {}: Monitor starting", ctx.channel_id());
+        let mut active_channels = active_channels.write().await;
+        active_channels.insert(cm);
+        info!("Channel {}: Monitor starting", ctx.channel_id());
+        ctx.reply("Started monitoring!").await?;
+    } else {
+        info!("Channel {}: Could not start Monitor", ctx.channel_id());
+        ctx.reply("Location is not found!").await?;
+    }
 
     Ok(())
 }
@@ -253,30 +264,10 @@ pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
     let active_channels = &ctx.data().active_channels;
 
     let mut active_channels = active_channels.write().await;
-    active_channels.remove(&ctx.channel_id());
+    active_channels.retain(|c| c.channel_id != ctx.channel_id());
 
     let bot_db = &ctx.data().bot_db;
     bot_db.change_active(ctx.channel_id(), false).await?;
-
-    let item_messages = &ctx.data().tgtg_messages;
-    let mut item_messages = item_messages.write().await;
-
-    // delete any posted messages
-    if let Some(channel_messages) = item_messages.get(&ctx.channel_id()) {
-        stream::iter(channel_messages.values())
-            .map(|v| async {
-                ctx.channel_id()
-                    .delete_message(&ctx.http(), v.message_id)
-                    .await
-            })
-            .all(|r| async { r.await.is_ok() })
-            .await
-            .then_some(())
-            .context("Could not delete the message from channel")?;
-    };
-
-    // delete items from item_messages
-    item_messages.remove(&ctx.channel_id());
 
     ctx.reply("Stopped monitoring!").await?;
     info!("Channel {}: Monitor stopping", ctx.channel_id());
