@@ -21,6 +21,7 @@ pub static OSM_ZOOM_LEVEL: u8 = 15;
 pub struct ItemMessage {
     pub message_id: MessageId,
     pub quantity: usize,
+    pub channel_id: ChannelId,
 }
 
 #[derive(Clone)]

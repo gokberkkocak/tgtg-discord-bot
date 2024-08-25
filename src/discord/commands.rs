@@ -1,4 +1,8 @@
-use poise::serenity_prelude as serenity;
+use anyhow::Context as _;
+use poise::serenity_prelude::{
+    self as serenity,
+    futures::{stream, StreamExt},
+};
 
 use regex::Regex;
 use serenity::all::{CreateEmbed, CreateMessage};
@@ -237,7 +241,7 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
         ctx.data().tgtg_messages.clone(),
     )
     .await;
-    ctx.reply("Starting now!").await?;
+    ctx.reply("Started monitoring!").await?;
     info!("Channel {}: Monitor starting", ctx.channel_id());
 
     Ok(())
@@ -252,9 +256,31 @@ pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
     active_channels.remove(&ctx.channel_id());
 
     let bot_db = &ctx.data().bot_db;
-
     bot_db.change_active(ctx.channel_id(), false).await?;
-    ctx.reply("Stopping now!").await?;
+
+    let item_messages = &ctx.data().tgtg_messages;
+    let mut item_messages = item_messages.write().await;
+
+    // delete any posted messages
+    stream::iter(item_messages.iter())
+        .filter_map(|(_k, i)| async {
+            if i.channel_id == ctx.channel_id() {
+                Some(i.message_id)
+            } else {
+                None
+            }
+        })
+        .map(|i| async move { ctx.channel_id().delete_message(&ctx.http(), i).await })
+        .all(|r| async { r.await.is_ok() })
+        .await
+        .then_some(())
+        .context("Could not delete the message from channel")?;
+
+    // delete items from item_messages
+    item_messages.retain(|_, v| v.channel_id != ctx.channel_id());
+
+
+    ctx.reply("Stopped monitoring!").await?;
     info!("Channel {}: Monitor stopping", ctx.channel_id());
 
     Ok(())
