@@ -13,6 +13,8 @@ use serde::Deserialize;
 use serenity::all::{ChannelId, MessageId};
 use tokio::sync::RwLock;
 
+use crate::monitor::ChannelMonitor;
+
 pub static RADIUS_UNIT: &str = "km";
 pub static DEFAULT_RADIUS: u8 = 1;
 pub static OSM_ZOOM_LEVEL: u8 = 15;
@@ -69,10 +71,9 @@ pub struct TGTGBindings {
 #[allow(dead_code)]
 pub struct DiscordData {
     pub bot_db: Arc<crate::db::BotDB>,
-    pub active_channels: Arc<RwLock<HashSet<ChannelId>>>,
+    pub active_channels: Arc<RwLock<HashSet<ChannelMonitor>>>,
     pub tgtg_bindings: Arc<TGTGBindings>,
     pub tgtg_configs: Arc<RwLock<HashMap<ChannelId, TGTGConfig>>>,
-    pub tgtg_messages: Arc<RwLock<HashMap<ChannelId, HashMap<String, ItemMessage>>>>,
 }
 
 #[derive(Debug, Deserialize)]
