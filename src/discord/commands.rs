@@ -52,7 +52,7 @@ pub async fn default(
             location
         }
     };
-    
+
     let bot_db = &ctx.data().bot_db;
     bot_db.set_location(ctx.channel_id(), &location).await?;
     info!(
@@ -225,8 +225,7 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
         ctx.channel_id().send_message(&ctx.http(), message).await?;
         ctx.reply("Here's the status!").await?;
     } else {
-        ctx.reply("Location is not found!")
-            .await?;
+        ctx.reply("Location is not found!").await?;
     }
     Ok(())
 }
@@ -234,6 +233,19 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
 /// Start monitoring TGTG for the channel
 #[poise::command[prefix_command, slash_command]]
 pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
+    // Are we already monitoring
+    if ctx
+        .data()
+        .active_channels
+        .read()
+        .await
+        .iter()
+        .map(|a| a.channel_id)
+        .any(|a| ctx.channel_id() == a)
+    {
+        ctx.reply("Already monitoring!").await?;
+        return Ok(());
+    }
     if let Some(tgtg_config) = ctx.data().tgtg_configs.read().await.get(&ctx.channel_id()) {
         let active_channels = &ctx.data().active_channels;
         let bot_db = &ctx.data().bot_db;
@@ -261,8 +273,21 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
 /// Start monitoring TGTG for the channel
 #[poise::command[prefix_command, slash_command]]
 pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
-    let active_channels = &ctx.data().active_channels;
+    // Are we already monitoring
+    if ctx
+        .data()
+        .active_channels
+        .read()
+        .await
+        .iter()
+        .map(|a| a.channel_id)
+        .all(|a| ctx.channel_id() != a)
+    {
+        ctx.reply("There is nothing to stop!").await?;
+        return Ok(());
+    }
 
+    let active_channels = &ctx.data().active_channels;
     let mut active_channels = active_channels.write().await;
     active_channels.retain(|c| c.channel_id != ctx.channel_id());
 
