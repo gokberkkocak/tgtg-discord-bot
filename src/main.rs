@@ -4,6 +4,7 @@ mod db;
 mod discord;
 mod monitor;
 mod tgtg;
+mod signal;
 
 use std::{collections::HashSet, env, sync::Arc, time::Duration};
 
@@ -83,8 +84,11 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    if let Err(why) = client.serenity_client.start().await {
-        error!("Client error: {:?}", why);
+    tokio::select! {
+        Err(why) = client.serenity_client.start() => {
+            error!("Client error: {:?}", why);
+        },
+        _ = signal::wait_for_signal() => {}
     }
     Ok(())
 }
