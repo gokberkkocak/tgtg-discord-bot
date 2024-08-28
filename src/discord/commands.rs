@@ -251,7 +251,7 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
         let bot_db = &ctx.data().bot_db;
         bot_db.change_active(ctx.channel_id(), true).await?;
         let http = ctx.serenity_context().http.clone();
-        let cm = crate::monitor::ChannelMonitor::monitor_location(
+        let cm = crate::monitor::ChannelMonitor::init(
             http,
             ctx.channel_id(),
             ctx.data().tgtg_bindings.clone(),
