@@ -32,12 +32,13 @@ pub struct ChannelMonitor {
 }
 
 impl ChannelMonitor {
-    pub fn monitor_location(
+    pub fn init(
         http: Arc<Http>,
         channel_id: ChannelId,
         tgtg_bindings: Arc<TGTGBindings>,
         tgtg_config: TGTGConfig,
     ) -> Self {
+        info!("Channel {}: Monitor starting (DB) ", channel_id);
         let messages = Arc::new(RwLock::new(HashMap::new()));
         let loop_messages = messages.clone();
         let loop_http = http.clone();
@@ -197,21 +198,34 @@ impl Drop for ChannelMonitor {
     fn drop(&mut self) {
         // abort watching
         self.handle.abort();
-        info!(
-            "Channel {}: Thread terminated for monitoring location",
-            self.channel_id
-        );
         // remove all messages from the discord channel
         let messages = self.messages.clone();
         let http = self.http.clone();
         let channel_id = self.channel_id;
-        tokio::spawn(async move {
-            let item_messages = messages.read().await;
-            stream::iter(item_messages.values())
-                .map(|v| async { channel_id.delete_message(&http, v.message_id).await })
-                .all(|r| async { r.await.is_ok() })
-                .await
+        // block_in_place ensures waiting for the block to finish even the executor is shutting down
+        tokio::task::block_in_place(move || {
+            tokio::runtime::Handle::current().block_on(async move {
+                let item_messages = messages.read().await;
+                let count = stream::iter(item_messages.values())
+                    .filter_map(|v| async {
+                        channel_id
+                            .delete_message(&http, v.message_id)
+                            .await
+                            .is_ok()
+                            .then_some(())
+                    })
+                    .count()
+                    .await;
+                tracing::debug!(
+                    "Channel {}: {} messages deleted from the discord channel",
+                    channel_id, count
+                );
+            });
         });
+        info!(
+            "Channel {}: Task terminated for monitoring location",
+            self.channel_id
+        );
     }
 }
 

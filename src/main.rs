@@ -65,13 +65,13 @@ async fn main() -> anyhow::Result<()> {
     let mut client = DiscordClient::new(&discord_token, intents, dc_data).await?;
 
     let http = client.serenity_client.http.clone();
-
+    let active_channels_clone = active_channels.clone();
     tokio::spawn(async move {
         // wait 10 secs first to let the bot connect to discord
         tokio::time::sleep(Duration::from_secs(10)).await;
         for (channel_id, config) in tgtg_configs.read().await.iter() {
             if active_set.contains(channel_id) {
-                let cm = crate::monitor::ChannelMonitor::monitor_location(
+                let cm = crate::monitor::ChannelMonitor::init(
                     http.clone(),
                     channel_id.to_owned(),
                     tgtg_bindings.clone(),
@@ -79,7 +79,6 @@ async fn main() -> anyhow::Result<()> {
                 );
                 let mut active_channels = active_channels.write().await;
                 active_channels.insert(cm);
-                info!("Channel {}: Monitor starting (DB) ", channel_id)
             }
         }
     });
@@ -88,7 +87,10 @@ async fn main() -> anyhow::Result<()> {
         Err(why) = client.serenity_client.start() => {
             error!("Client error: {:?}", why);
         },
-        _ = signal::wait_for_signal() => {}
+        _ = signal::wait_for_signal() => {
+            // clean up active channels first before shutting down
+            active_channels_clone.write().await.clear();
+        }
     }
     Ok(())
 }
