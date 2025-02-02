@@ -3,8 +3,8 @@ mod data;
 mod db;
 mod discord;
 mod monitor;
-mod tgtg;
 mod signal;
+mod tgtg;
 
 use std::{collections::HashSet, env, sync::Arc, time::Duration};
 
@@ -15,7 +15,7 @@ use poise::serenity_prelude as serenity;
 
 use serenity::all::GatewayIntents;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::error;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
