@@ -196,7 +196,7 @@ async fn full(
 #[poise::command[prefix_command, slash_command]]
 pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
     let location_map = &ctx.data().tgtg_configs;
-    if let Some(location) = location_map.read().await.get(&ctx.channel_id()) {
+    match location_map.read().await.get(&ctx.channel_id()) { Some(location) => {
         let active_channels = &ctx.data().active_channels;
         let is_active = active_channels
             .read()
@@ -224,9 +224,9 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
         let message = CreateMessage::new().add_embed(embed);
         ctx.channel_id().send_message(&ctx.http(), message).await?;
         ctx.reply("Here's the status!").await?;
-    } else {
+    } _ => {
         ctx.reply("Location is not found!").await?;
-    }
+    }}
     Ok(())
 }
 
@@ -246,7 +246,7 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
         ctx.reply("Already monitoring!").await?;
         return Ok(());
     }
-    if let Some(tgtg_config) = ctx.data().tgtg_configs.read().await.get(&ctx.channel_id()) {
+    match ctx.data().tgtg_configs.read().await.get(&ctx.channel_id()) { Some(tgtg_config) => {
         let active_channels = &ctx.data().active_channels;
         let bot_db = &ctx.data().bot_db;
         bot_db.change_active(ctx.channel_id(), true).await?;
@@ -262,10 +262,10 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
         active_channels.insert(cm);
         info!("Channel {}: Monitor starting", ctx.channel_id());
         ctx.reply("Started monitoring!").await?;
-    } else {
+    } _ => {
         info!("Channel {}: Could not start Monitor", ctx.channel_id());
         ctx.reply("Location is not found!").await?;
-    }
+    }}
 
     Ok(())
 }
