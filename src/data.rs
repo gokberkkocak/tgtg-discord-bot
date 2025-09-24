@@ -6,7 +6,6 @@ use std::{
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use poise::serenity_prelude as serenity;
-use pyo3::PyObject;
 use regex::Regex;
 
 use serde::Deserialize;
@@ -64,8 +63,8 @@ impl TGTGConfig {
 
 #[derive(Debug)]
 pub struct TGTGBindings {
-    pub client: PyObject,
-    pub fetch_func: PyObject,
+    pub client: pyo3::Py<pyo3::PyAny>,
+    pub fetch_func: pyo3::Py<pyo3::PyAny>,
 }
 
 #[allow(dead_code)]
