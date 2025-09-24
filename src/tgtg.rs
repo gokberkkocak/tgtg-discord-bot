@@ -6,7 +6,7 @@ use tracing::info;
 use crate::data::{TGTGBindings, TGTGConfig, TGTGListing};
 
 pub(crate) fn check_python() -> PyResult<()> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let sys = py.import("sys")?;
         let version: String = sys.getattr("version")?.extract()?;
         let locals = [("os", py.import("os")?)].into_py_dict(py)?;
@@ -25,8 +25,8 @@ pub fn init_client(
     refresh_token: &str,
     user_id: &str,
     cookie: &str,
-) -> PyResult<PyObject> {
-    Python::with_gil(|py| {
+) -> PyResult<Py<PyAny>> {
+    Python::attach(|py| {
         let tgtg_client_fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!("
@@ -40,13 +40,13 @@ def get_client(access_token, refresh_token, user_id, cookie):
         .getattr("get_client")?
         .into();
         let args = PyTuple::new(py, [&access_token, &refresh_token, &user_id, &cookie])?;
-        let ret: PyObject = tgtg_client_fun.call1(py, args)?;
+        let ret: pyo3::Py<pyo3::PyAny> = tgtg_client_fun.call1(py, args)?;
         Ok(ret)
     })
 }
 
-pub fn init_fetch_func() -> PyResult<PyObject> {
-    Python::with_gil(|py| {
+pub fn init_fetch_func() -> PyResult<pyo3::Py<pyo3::PyAny>> {
+    Python::attach(|py| {
         let func = PyModule::from_code(
             py,
             c_str!("
@@ -70,7 +70,7 @@ def fetch_items(client, latitude, longitude, radius):
 }
 
 fn py_get_items(tgtg: &TGTGBindings, config: &TGTGConfig) -> PyResult<String> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let client = tgtg.client.extract(py)?;
         let params = PyTuple::new(
             py,
@@ -115,7 +115,7 @@ mod test {
 
     #[test]
     fn test_tgtg_module() -> PyResult<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             py.import("tgtg")?;
             Ok(())
         })
