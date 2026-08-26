@@ -28,7 +28,6 @@ jobs:
       uses: actions/checkout@v7
     - name: DB Migrations
       run: |
-        sqlite3 bot.db < migrations/20220301134633_bot.sql
         sqlite3 bot.db < migrations/20260826000000_shop_subscriptions.sql
     - name : Install python dependencies
       run: |

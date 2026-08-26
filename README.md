@@ -19,15 +19,6 @@ The system also uses an sqlite db system for the bot to remember channels, watch
 You can generate an empty sqlite db as follows:
 
 ```
-sqlite3 bot.db < migrations/20220301134633_bot.sql 
-sqlite3 bot.db < migrations/20260826000000_shop_subscriptions.sql
-```
-
-### Migrating from an older version
-
-If you already run an older version of the bot, **back up your database first** (`cp bot.db bot.db.bak`) and then apply the new migration. Your existing channel locations are converted into location watches automatically:
-
-```
 sqlite3 bot.db < migrations/20260826000000_shop_subscriptions.sql
 ```
 
@@ -113,7 +104,7 @@ The listing includes price, quantity, distance and the pickup interval time. If 
 
 ### Breaking changes
 
-The old `/location default|radius|full` and `/status` commands were removed in favor of the unified `/watch` system. Migrate your locations with `/watch location` (or apply the db migration, which converts them for you).
+The old `/location default|radius|full` and `/status` commands were removed in favor of the unified `/watch` system. This is a breaking release: the database schema changed, so recreate your db (see above) and set up your watches again with `/watch location`.
 
 ## Compilation
 
@@ -121,7 +112,6 @@ The system uses sqlx for compile time query verification. Therefore, the databas
 
 ```
 export DATABASE_URL=sqlite:bot.db
-sqlite3 bot.db < migrations/20220301134633_bot.sql 
 sqlite3 bot.db < migrations/20260826000000_shop_subscriptions.sql
 pip install -r requirements.txt
 cargo b --release

@@ -26,7 +26,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY ./ ./
 
 ENV DATABASE_URL=sqlite:bot.db
-RUN sqlite3 bot.db < migrations/20220301134633_bot.sql && sqlite3 bot.db < migrations/20260826000000_shop_subscriptions.sql
+RUN sqlite3 bot.db < migrations/20260826000000_shop_subscriptions.sql
 
 RUN mkdir -p /app/bin
 RUN cargo build --release
