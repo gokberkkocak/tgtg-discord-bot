@@ -2,7 +2,7 @@
 
 This discord bot helps you keep track what TGTG magic bags available in a given area. 
 
-When the bot is set, it posts available bags to a discord channel. It's capable to update and delete them when the quantity changes.
+You can either **watch an area** (all shops within a radius, optionally filtered by a regex) or **watch individual shops** that you pick from a browsable list. The bot posts available bags to a discord channel and is capable of updating and deleting them when quantities change.
 
 ## Requirements
 
@@ -14,12 +14,21 @@ You will need a Discord API Token and TGTG credentials.
 
 Once you have the necessary token, put them into your environment variables (or .env file). 
 
-The system also uses an sqlite db system for the bot to remember channels and locations from previous runs. 
+The system also uses an sqlite db system for the bot to remember channels, watches and their state from previous runs. 
 
 You can generate an empty sqlite db as follows:
 
 ```
 sqlite3 bot.db < migrations/20220301134633_bot.sql 
+sqlite3 bot.db < migrations/20260826000000_shop_subscriptions.sql
+```
+
+### Migrating from an older version
+
+If you already run an older version of the bot, **back up your database first** (`cp bot.db bot.db.bak`) and then apply the new migration. Your existing channel locations are converted into location watches automatically:
+
+```
+sqlite3 bot.db < migrations/20260826000000_shop_subscriptions.sql
 ```
 
 You should also set the db environment variable (DATABASE_URL) as well.
@@ -70,15 +79,25 @@ Available commands can be seen with the `/` usage.
 
 ![Commands](images/slash_commands.png)
 
-You should register the location as the first command to be able use the bot. You can retrieve the wanted location's latitude and longitude on OpenStreetMaps' address bar or on Google Maps' context menu. Setting a radius is optional. It defaults to 3 km. 
+### Watching an area
 
-### Example - Setting a location
+Use `/watch location` with a latitude/longitude to watch **all** shops in that area, including ones without stock. You can retrieve coordinates on OpenStreetMaps' address bar or on Google Maps' context menu. A radius in km (defaults to 1 km) and a regex filter on shop names are optional. Every shop matching your area shows up as an embed listing which is automatically updated or deleted as quantities change.
 
-![Location entry](images/location_entry.png)
+You can add multiple watches per channel; each one gets an ID shown by `/subscriptions`.
 
-The bot responds with a message to confirm.
+### Browsing shops
 
-![Location confirm](images/location_confirm.png)
+Use `/list-shops` to browse all shops of an area (~10 per page), including zero-stock shops. Shops you already watch are marked with ✅. The lookup origin is remembered: explicit coordinates first, then the last browsed area of the channel, then any location watch.
+
+### Watching a single shop
+
+Use `/watch store` with a shop name (searched around the remembered origin) to follow just that one shop. If a watched store temporarily disappears from the API, the bot re-links it automatically; if it stays gone, the bot removes the watch, cleans up its messages and posts a 🛑 notice.
+
+### Managing watches
+
+- `/subscriptions` lists all watches of the channel with their status and when they last fired.
+- `/unwatch <id>` removes a watch.
+- `/start` and `/stop` toggle monitoring for the channel. Watches can be added and removed live while the monitor runs.
 
 ### Example - Starting
 
@@ -86,17 +105,15 @@ The bot responds with a message to confirm.
 
 The bot acknowledges the command with a reply. This applies to stop as well.
 
-### Example - Status
-
-![Start](images/status.png)
-
-The bot responds with the confirmation of the location and its monitoring status.
-
 ### Example - Listing
 
 ![Listing](images/listing.png)
 
 The listing includes price, quantity, distance and the pickup interval time. If you click the listing, you will be redirected to OSM for the store location. The bot automatically updates if the quantity changes or deletes it if the item is not available anymore.
+
+### Breaking changes
+
+The old `/location default|radius|full` and `/status` commands were removed in favor of the unified `/watch` system. Migrate your locations with `/watch location` (or apply the db migration, which converts them for you).
 
 ## Compilation
 
@@ -105,6 +122,7 @@ The system uses sqlx for compile time query verification. Therefore, the databas
 ```
 export DATABASE_URL=sqlite:bot.db
 sqlite3 bot.db < migrations/20220301134633_bot.sql 
+sqlite3 bot.db < migrations/20260826000000_shop_subscriptions.sql
 pip install -r requirements.txt
 cargo b --release
 ```
