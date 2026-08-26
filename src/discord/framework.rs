@@ -1,7 +1,7 @@
 use poise::serenity_prelude as serenity;
 
-use serenity::all::GatewayIntents;
 use serenity::Client;
+use serenity::all::GatewayIntents;
 
 use crate::data::DiscordData;
 
@@ -19,8 +19,10 @@ impl DiscordClient {
             .options(poise::FrameworkOptions {
                 commands: vec![
                     super::commands::health(),
-                    super::commands::location(),
-                    super::commands::status(),
+                    super::commands::watch(),
+                    super::commands::unwatch(),
+                    super::commands::list_shops(),
+                    super::commands::subscriptions(),
                     super::commands::start(),
                     super::commands::stop(),
                 ],

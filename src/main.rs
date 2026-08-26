@@ -1,12 +1,9 @@
-// mod commands;
-mod data;
-mod db;
-mod discord;
-mod monitor;
-mod signal;
-mod tgtg;
-
-use std::{collections::HashSet, env, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+    sync::Arc,
+    time::Duration,
+};
 
 use data::{DiscordData, TGTGBindings};
 use discord::framework::DiscordClient;
@@ -16,6 +13,13 @@ use poise::serenity_prelude as serenity;
 use serenity::all::GatewayIntents;
 use tokio::sync::RwLock;
 use tracing::error;
+
+mod data;
+mod db;
+mod discord;
+mod monitor;
+mod signal;
+mod tgtg;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -37,7 +41,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Bot DB
     let bot_db = Arc::new(db::BotDB::new(&db_url).await?);
-    let (location_map, active_set) = bot_db.get_locations().await?;
+    let (watches_map, active_set) = bot_db.load_all().await?;
+    let watches = Arc::new(RwLock::new(watches_map));
 
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
@@ -52,14 +57,18 @@ async fn main() -> anyhow::Result<()> {
             &tgtg_cookie,
         )?,
         fetch_func: crate::tgtg::init_fetch_func()?,
+        item_fetch_func: crate::tgtg::init_item_fetch_func()?,
     });
-    let tgtg_configs = Arc::new(RwLock::new(location_map));
+    let browse_origins = Arc::new(RwLock::new(HashMap::new()));
+    let last_fired = Arc::new(RwLock::new(HashMap::new()));
 
     let dc_data = DiscordData {
-        bot_db,
+        bot_db: bot_db.clone(),
         active_channels: active_channels.clone(),
         tgtg_bindings: tgtg_bindings.clone(),
-        tgtg_configs: tgtg_configs.clone(),
+        watches: watches.clone(),
+        browse_origins: browse_origins.clone(),
+        last_fired: last_fired.clone(),
     };
 
     let mut client = DiscordClient::new(&discord_token, intents, dc_data).await?;
@@ -69,17 +78,17 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         // wait 10 secs first to let the bot connect to discord
         tokio::time::sleep(Duration::from_secs(10)).await;
-        for (channel_id, config) in tgtg_configs.read().await.iter() {
-            if active_set.contains(channel_id) {
-                let cm = crate::monitor::ChannelMonitor::init(
-                    http.clone(),
-                    channel_id.to_owned(),
-                    tgtg_bindings.clone(),
-                    config.to_owned(),
-                );
-                let mut active_channels = active_channels.write().await;
-                active_channels.insert(cm);
-            }
+        for channel_id in active_set {
+            let cm = crate::monitor::ChannelMonitor::init(
+                http.clone(),
+                channel_id,
+                tgtg_bindings.clone(),
+                bot_db.clone(),
+                watches.clone(),
+                last_fired.clone(),
+            );
+            let mut active_channels = active_channels.write().await;
+            active_channels.insert(cm);
         }
     });
 

@@ -1,11 +1,14 @@
-use anyhow::Context as _;
-use poise::serenity_prelude::{self as serenity};
-
+use anyhow::{Context as _, Result};
+use poise::serenity_prelude as serenity;
 use regex::Regex;
-use serenity::all::{CreateEmbed, CreateMessage};
+use serenity::all::CreateEmbed;
 use tracing::info;
 
-use crate::data::{TGTGConfig, OSM_ZOOM_LEVEL, RADIUS_UNIT};
+use crate::data::{
+    BrowseOrigin, DEFAULT_BROWSE_RADIUS, DEFAULT_RADIUS, LIST_PAGE_SIZE, MAX_BROWSE_RADIUS,
+    OSM_ZOOM_LEVEL, RADIUS_UNIT, Watch, WatchDetails,
+};
+use crate::monitor;
 
 use super::{Context, Error};
 
@@ -17,216 +20,326 @@ pub async fn health(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
-#[poise::command(
-    prefix_command,
-    slash_command,
-    subcommands("default", "radius", "full")
-)]
-pub async fn location(ctx: Context<'_>) -> Result<(), Error> {
-    ctx.say("Hello there!").await?;
+/// Manage your shop and location watches
+#[poise::command(prefix_command, slash_command, subcommands("location", "store"))]
+pub async fn watch(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.say("Use `/watch location` or `/watch store`.").await?;
     Ok(())
 }
 
-/// Sets the location for the bot with default radius (1 km) without filtering
+/// Watch all shops in an area around given coordinates
 #[poise::command[prefix_command, slash_command]]
-pub async fn default(
+async fn location(
     ctx: Context<'_>,
     #[description = "latitude"] latitude: f64,
     #[description = "longitude"] longitude: f64,
+    #[description = "radius in km (default 1)"] radius: Option<u8>,
+    #[description = "regex filter for shop names"] regex: Option<String>,
 ) -> Result<(), Error> {
-    let location_map = &ctx.data().tgtg_configs;
-    let location = {
-        let exists = location_map.read().await.contains_key(&ctx.channel_id());
-        if exists {
-            let mut lock = location_map.write().await;
-            let location = lock.get_mut(&ctx.channel_id()).context("exists failure")?;
-            location.latitude = latitude;
-            location.longitude = longitude;
-            location.clone()
-        } else {
-            let location = TGTGConfig::new(latitude, longitude);
-            location_map
-                .write()
-                .await
-                .insert(ctx.channel_id(), location.clone());
-            location
-        }
+    let regex = match regex {
+        Some(pattern) => Some(Regex::new(&pattern)?),
+        None => None,
     };
-
-    let bot_db = &ctx.data().bot_db;
-    bot_db.set_location(ctx.channel_id(), &location).await?;
-    info!(
-        "Channel {}: Location set ({}, {})",
-        ctx.channel_id(),
-        latitude,
-        longitude,
-    );
-    let mut embed = CreateEmbed::new()
-        .title("Location")
-        .description("TooGoodToGo location is set for this channel")
+    let radius = radius.unwrap_or(DEFAULT_RADIUS);
+    let mut watch = Watch::new_location(ctx.channel_id(), latitude, longitude, radius, regex);
+    let id = ctx.data().bot_db.add_watch(&watch).await?;
+    watch.id = id;
+    ctx.data()
+        .watches
+        .write()
+        .await
+        .entry(ctx.channel_id())
+        .or_default()
+        .push(watch.clone());
+    info!("Channel {}: Location watch {} added", ctx.channel_id(), id);
+    let embed = CreateEmbed::new()
+        .title(format!("Watch #{} added", id))
+        .description(watch.describe())
         .url(format!(
             "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
             OSM_ZOOM_LEVEL, latitude, longitude
         ))
-        .field("Latitude", format!("{:.4}", latitude), true)
-        .field("Longitude", format!("{:.4}", longitude), true)
         .field(
-            "Radius",
-            format!("{} {}", location.radius, RADIUS_UNIT),
+            "Status",
+            if ctx.data().bot_db.get_active(ctx.channel_id()).await? {
+                "\u{2705} running"
+            } else {
+                "\u{23F8} use /start"
+            },
             true,
         );
-    if let Some(regex) = &location.regex {
-        embed = embed.field("Regex", regex.as_str().replace('*', "\\*"), true);
-    }
-    ctx.reply("Location has been set!").await?;
-    ctx.channel_id()
-        .send_message(ctx.http(), CreateMessage::new().add_embed(embed))
-        .await?;
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }
 
-/// Sets the location for the bot with radius info without filtering
+/// Watch a single shop by its name (searched around a lookup origin)
 #[poise::command[prefix_command, slash_command]]
-async fn radius(
+async fn store(
     ctx: Context<'_>,
-    #[description = "latitude"] latitude: f64,
-    #[description = "longitude"] longitude: f64,
-    #[description = "radius"] radius: u8,
+    #[description = "shop name to search"] name: String,
+    #[description = "latitude of the lookup origin"] latitude: Option<f64>,
+    #[description = "longitude of the lookup origin"] longitude: Option<f64>,
 ) -> Result<(), Error> {
-    let location_map = &ctx.data().tgtg_configs;
-    let location = {
-        let exists = location_map.read().await.contains_key(&ctx.channel_id());
-        if exists {
-            let mut lock = location_map.write().await;
-            let location = lock.get_mut(&ctx.channel_id()).context("exists failure")?;
-            location.latitude = latitude;
-            location.longitude = longitude;
-            location.radius = radius;
-            location.clone()
-        } else {
-            let location = TGTGConfig::new_with_radius(latitude, longitude, radius);
-            location_map
-                .write()
-                .await
-                .insert(ctx.channel_id(), location.clone());
-            location
+    let origin = match resolve_origin(ctx, latitude, longitude, None)
+        .await
+        .context("lookup origin resolution")
+    {
+        Ok(origin) => origin,
+        Err(why) => {
+            ctx.say(format!(
+                "{} Consider using /list-shops first or adding a location watch.",
+                why
+            ))
+            .await?;
+            return Ok(());
         }
     };
-
-    let bot_db = &ctx.data().bot_db;
-    bot_db.set_location(ctx.channel_id(), &location).await?;
-    info!("Channel {}: Radius set {} ", ctx.channel_id(), radius);
-    let mut embed = CreateEmbed::new()
-        .title("Radius")
-        .description("TooGoodToGo radius is set for this channel")
-        .field("Latitude", format!("{:.4}", location.latitude), true)
-        .field("Longitude", format!("{:.4}", location.longitude), true)
-        .field("Radius", format!("{} {}", radius, RADIUS_UNIT), true)
-        .url(format!(
-            "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-            OSM_ZOOM_LEVEL, location.latitude, location.longitude
-        ));
-    if let Some(regex) = &location.regex {
-        embed = embed.field("Regex", regex.as_str().replace('*', "\\*"), true);
-    }
-    ctx.reply("Location has been set!").await?;
-    ctx.channel_id()
-        .send_message(&ctx.http(), CreateMessage::new().add_embed(embed))
+    let listings = crate::tgtg::browse_area(&ctx.data().tgtg_bindings, &origin, Some(&name))?;
+    // Results are sorted by distance; pin the watch onto the best item of the nearest matching shop.
+    let target_store_id = listings.first().map(|l| l.store.store_id.clone());
+    let listing = target_store_id
+        .as_deref()
+        .and_then(|store_id| monitor::best_listing_for_store(&listings, store_id));
+    let Some(listing) = listing else {
+        ctx.say(format!(
+            "No shop found for '{}' around ({:.4}, {:.4}).",
+            name, origin.latitude, origin.longitude
+        ))
         .await?;
-
+        return Ok(());
+    };
+    let mut watch = Watch::new_store(
+        ctx.channel_id(),
+        listing.store.store_id.clone(),
+        listing.item.item_id.clone(),
+        listing.store.store_name.clone(),
+        origin.latitude,
+        origin.longitude,
+    );
+    let id = ctx.data().bot_db.add_watch(&watch).await?;
+    watch.id = id;
+    ctx.data()
+        .watches
+        .write()
+        .await
+        .entry(ctx.channel_id())
+        .or_default()
+        .push(watch.clone());
+    info!(
+        "Channel {}: Store watch {} added for {}",
+        ctx.channel_id(),
+        id,
+        listing.store.store_name
+    );
+    let embed = CreateEmbed::new()
+        .title(format!("Watch #{} added", id))
+        .description(watch.describe())
+        .field("Item", listing.display_name.clone(), true)
+        .field("Quantity", format!("{}", listing.items_available), true)
+        .field(
+            "Status",
+            if ctx.data().bot_db.get_active(ctx.channel_id()).await? {
+                "\u{2705} running"
+            } else {
+                "\u{23F8} use /start"
+            },
+            true,
+        );
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }
 
-/// Sets the location with given radius with regex filter
+/// Remove one of this channel's watches by its ID
 #[poise::command[prefix_command, slash_command]]
-async fn full(
+pub async fn unwatch(
     ctx: Context<'_>,
-    #[description = "latitude"] latitude: f64,
-    #[description = "longitude"] longitude: f64,
-    #[description = "radius"] radius: u8,
-    #[description = "regex"] regex: String,
+    #[description = "watch ID (see /subscriptions)"] watch_id: i64,
 ) -> Result<(), Error> {
-    let location_map = &ctx.data().tgtg_configs;
-    let location = {
-        let exists = location_map.read().await.contains_key(&ctx.channel_id());
-        if exists {
-            let mut lock = location_map.write().await;
-            let location = lock.get_mut(&ctx.channel_id()).context("exists failure")?;
-            location.latitude = latitude;
-            location.longitude = longitude;
-            location.radius = radius;
-            location.regex = Some(Regex::new(&regex)?);
-            location.clone()
-        } else {
-            let regex = Regex::new(&regex)?;
-            let location = TGTGConfig::new_full(latitude, longitude, radius, regex);
-            location_map
-                .write()
-                .await
-                .insert(ctx.channel_id(), location.clone());
-            location
+    let removed = ctx
+        .data()
+        .watches
+        .write()
+        .await
+        .get_mut(&ctx.channel_id())
+        .map(|channel_watches| {
+            let len_before = channel_watches.len();
+            channel_watches.retain(|w| w.id != watch_id);
+            channel_watches.len() != len_before
+        })
+        .unwrap_or(false);
+    if !removed {
+        ctx.say(format!("No watch with ID {} in this channel.", watch_id))
+            .await?;
+        return Ok(());
+    }
+    ctx.data().last_fired.write().await.remove(&watch_id);
+    ctx.data().bot_db.remove_watch(watch_id).await?;
+    info!("Channel {}: Watch {} removed", ctx.channel_id(), watch_id);
+    ctx.say(format!("Removed watch #{}.", watch_id)).await?;
+    Ok(())
+}
+
+/// Browse shops of an area, including ones without stock
+#[poise::command[prefix_command, slash_command]]
+pub async fn list_shops(
+    ctx: Context<'_>,
+    #[description = "latitude"] latitude: Option<f64>,
+    #[description = "longitude"] longitude: Option<f64>,
+    #[description = "radius in km"] radius: Option<u8>,
+    #[description = "substring filter for shop names"] filter: Option<String>,
+    #[description = "page number"] page: Option<u32>,
+) -> Result<(), Error> {
+    let radius = radius.map(|r| r.min(MAX_BROWSE_RADIUS));
+    let origin = match resolve_origin(ctx, latitude, longitude, radius)
+        .await
+        .context("lookup origin resolution")
+    {
+        Ok(origin) => origin,
+        Err(why) => {
+            ctx.say(format!(
+                "{} Consider using coordinates or adding a location watch.",
+                why
+            ))
+            .await?;
+            return Ok(());
         }
     };
+    // Remember the browsed area as future lookup origin for this channel.
+    ctx.data()
+        .browse_origins
+        .write()
+        .await
+        .insert(ctx.channel_id(), origin);
 
-    let bot_db = &ctx.data().bot_db;
-    bot_db.set_location(ctx.channel_id(), &location).await?;
-    info!("Channel {}: Radius set {} ", ctx.channel_id(), radius);
-    let mut embed = CreateEmbed::new()
-        .title("Radius")
-        .description("TooGoodToGo radius is set for this channel")
-        .field("Latitude", format!("{:.4}", location.latitude), true)
-        .field("Longitude", format!("{:.4}", location.longitude), true)
-        .field("Radius", format!("{} {}", radius, RADIUS_UNIT), true)
+    let listings = crate::tgtg::browse_area(&ctx.data().tgtg_bindings, &origin, None)?;
+    let filter_lower = filter.as_deref().map(str::to_lowercase);
+    let filtered: Vec<_> = listings
+        .into_iter()
+        .filter(|listing| match &filter_lower {
+            Some(filter_lower) => listing
+                .store
+                .store_name
+                .to_lowercase()
+                .contains(filter_lower),
+            None => true,
+        })
+        .collect();
+    if filtered.is_empty() {
+        ctx.say("No shops found for this area and filter.").await?;
+        return Ok(());
+    }
+
+    let watched_stores: std::collections::HashSet<String> = ctx
+        .data()
+        .watches
+        .read()
+        .await
+        .get(&ctx.channel_id())
+        .map(|channel_watches| {
+            channel_watches
+                .iter()
+                .filter_map(|w| match &w.details {
+                    WatchDetails::Store { store_id, .. } => Some(store_id.clone()),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let total_pages = filtered.len().div_ceil(LIST_PAGE_SIZE).max(1) as u32;
+    let page = page.unwrap_or(1).clamp(1, total_pages);
+    let page_items: Vec<_> = filtered
+        .iter()
+        .skip((page as usize - 1) * LIST_PAGE_SIZE)
+        .take(LIST_PAGE_SIZE)
+        .collect();
+
+    let mut description = String::new();
+    for listing in page_items {
+        let mark = if watched_stores.contains(&listing.store.store_id) {
+            "\u{2705}"
+        } else {
+            "\u{25AB}"
+        };
+        let distance = listing
+            .distance
+            .map(|d| format!(" \u{00B7} {:.2} {}", d, RADIUS_UNIT))
+            .unwrap_or_default();
+        description.push_str(&format!(
+            "{} **{}** \u{00B7} {} left{}\n",
+            mark, listing.store.store_name, listing.items_available, distance
+        ));
+    }
+    let embed = CreateEmbed::new()
+        .title("Shops")
+        .description(description)
+        .footer(serenity::all::CreateEmbedFooter::new(match page {
+            _ if page < total_pages => format!(
+                "{} shops \u{00B7} page {} of {} \u{00B7} next: /list-shops page:{}",
+                filtered.len(),
+                page,
+                total_pages,
+                page + 1
+            ),
+            _ => format!(
+                "{} shops \u{00B7} page {} of {}",
+                filtered.len(),
+                page,
+                total_pages
+            ),
+        }))
         .url(format!(
             "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-            OSM_ZOOM_LEVEL, location.latitude, location.longitude
+            OSM_ZOOM_LEVEL, origin.latitude, origin.longitude
         ));
-    if let Some(regex) = &location.regex {
-        embed = embed.field("Regex", regex.as_str().replace('*', "\\*"), true);
-    }
-    ctx.reply("Location has been set!").await?;
-    ctx.channel_id()
-        .send_message(&ctx.http(), CreateMessage::new().add_embed(embed))
-        .await?;
-
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }
 
-/// Check the status for the current channel
+/// Show all watches of this channel with their current status
 #[poise::command[prefix_command, slash_command]]
-pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
-    let location_map = &ctx.data().tgtg_configs;
-    match location_map.read().await.get(&ctx.channel_id()) { Some(location) => {
-        let active_channels = &ctx.data().active_channels;
-        let is_active = active_channels
-            .read()
-            .await
-            .iter()
-            .any(|c| c.channel_id == ctx.channel_id());
-        let mut embed = CreateEmbed::new()
-            .title("Monitor Status")
-            .description("TooGoodToGo monitor status")
-            .field("Latitude", format!("{:.4}", location.latitude), true)
-            .field("Longitude", format!("{:.4}", location.longitude), true)
-            .field(
-                "Radius",
-                format!("{} {}", location.radius, RADIUS_UNIT),
-                true,
-            )
-            .url(format!(
-                "https://www.openstreetmap.org/#map={}/{:.4}/{:.4}",
-                OSM_ZOOM_LEVEL, location.latitude, location.longitude
-            ));
-        if let Some(regex) = &location.regex {
-            embed = embed.field("Regex", regex.as_str().replace('*', "\\*"), true);
-        }
-        embed = embed.field("Active", if is_active { "✅" } else { "❌" }, true);
-        let message = CreateMessage::new().add_embed(embed);
-        ctx.channel_id().send_message(&ctx.http(), message).await?;
-        ctx.reply("Here's the status!").await?;
-    } _ => {
-        ctx.reply("Location is not found!").await?;
-    }}
+pub async fn subscriptions(ctx: Context<'_>) -> Result<(), Error> {
+    let channel_watches = ctx
+        .data()
+        .watches
+        .read()
+        .await
+        .get(&ctx.channel_id())
+        .cloned();
+    let Some(channel_watches) = channel_watches else {
+        ctx.say("No watches yet! Use /watch to add some.").await?;
+        return Ok(());
+    };
+    let running = ctx.data().bot_db.get_active(ctx.channel_id()).await?;
+    let last_fired = ctx.data().last_fired.read().await;
+    let mut description = String::new();
+    for watch in &channel_watches {
+        let status = if running { "\u{2705}" } else { "\u{23F8}" };
+        let fired = match last_fired.get(&watch.id) {
+            Some(fired) => fired.format("%Y-%m-%d %H:%M UTC").to_string(),
+            None => "never".to_string(),
+        };
+        description.push_str(&format!(
+            "`#{}` {} \u{00B7} {} \u{00B7} fired: {}\n",
+            watch.id,
+            watch.describe(),
+            status,
+            fired
+        ));
+    }
+    let embed = CreateEmbed::new()
+        .title("Subscriptions")
+        .description(description)
+        .field(
+            "Monitor",
+            if running {
+                "\u{2705} running".to_string()
+            } else {
+                "\u{23F8} stopped".to_string()
+            },
+            true,
+        );
+    ctx.send(poise::CreateReply::default().embed(embed)).await?;
     Ok(())
 }
 
@@ -240,37 +353,44 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
         .read()
         .await
         .iter()
-        .map(|a| a.channel_id)
-        .any(|a| ctx.channel_id() == a)
+        .any(|c| c.channel_id == ctx.channel_id())
     {
         ctx.reply("Already monitoring!").await?;
         return Ok(());
     }
-    match ctx.data().tgtg_configs.read().await.get(&ctx.channel_id()) { Some(tgtg_config) => {
-        let active_channels = &ctx.data().active_channels;
-        let bot_db = &ctx.data().bot_db;
-        bot_db.change_active(ctx.channel_id(), true).await?;
-        let http = ctx.serenity_context().http.clone();
-        let cm = crate::monitor::ChannelMonitor::init(
-            http,
-            ctx.channel_id(),
-            ctx.data().tgtg_bindings.clone(),
-            tgtg_config.clone(),
-        );
+    let watch_count = ctx
+        .data()
+        .watches
+        .read()
+        .await
+        .get(&ctx.channel_id())
+        .map(Vec::len)
+        .unwrap_or(0);
+    let bot_db = &ctx.data().bot_db;
+    bot_db.set_active(ctx.channel_id(), true).await?;
+    let http = ctx.serenity_context().http.clone();
+    let cm = crate::monitor::ChannelMonitor::init(
+        http,
+        ctx.channel_id(),
+        ctx.data().tgtg_bindings.clone(),
+        ctx.data().bot_db.clone(),
+        ctx.data().watches.clone(),
+        ctx.data().last_fired.clone(),
+    );
 
-        let mut active_channels = active_channels.write().await;
-        active_channels.insert(cm);
-        info!("Channel {}: Monitor starting", ctx.channel_id());
-        ctx.reply("Started monitoring!").await?;
-    } _ => {
-        info!("Channel {}: Could not start Monitor", ctx.channel_id());
-        ctx.reply("Location is not found!").await?;
-    }}
-
+    ctx.data().active_channels.write().await.insert(cm);
+    info!("Channel {}: Monitor starting", ctx.channel_id());
+    if watch_count == 0 {
+        ctx.reply("Started monitoring! You have no watches yet, add some with /watch.")
+            .await?;
+    } else {
+        ctx.reply(format!("Started monitoring {} watch(s)!", watch_count))
+            .await?;
+    }
     Ok(())
 }
 
-/// Start monitoring TGTG for the channel
+/// Stop monitoring TGTG for the channel
 #[poise::command[prefix_command, slash_command]]
 pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
     // Are we already monitoring
@@ -280,22 +400,81 @@ pub async fn stop(ctx: Context<'_>) -> Result<(), Error> {
         .read()
         .await
         .iter()
-        .map(|a| a.channel_id)
-        .all(|a| ctx.channel_id() != a)
+        .all(|c| c.channel_id != ctx.channel_id())
     {
         ctx.reply("There is nothing to stop!").await?;
         return Ok(());
     }
 
-    let active_channels = &ctx.data().active_channels;
-    let mut active_channels = active_channels.write().await;
-    active_channels.retain(|c| c.channel_id != ctx.channel_id());
+    ctx.data()
+        .active_channels
+        .write()
+        .await
+        .retain(|c| c.channel_id != ctx.channel_id());
 
     let bot_db = &ctx.data().bot_db;
-    bot_db.change_active(ctx.channel_id(), false).await?;
+    bot_db.set_active(ctx.channel_id(), false).await?;
 
     ctx.reply("Stopped monitoring!").await?;
     info!("Channel {}: Monitor stopping", ctx.channel_id());
 
     Ok(())
+}
+
+/// Resolves a browse/lookup origin: explicit coordinates > remembered
+/// `/list-shops` area > existing location watch of the channel.
+async fn resolve_origin(
+    ctx: Context<'_>,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    radius_override: Option<u8>,
+) -> Result<BrowseOrigin> {
+    if let (Some(latitude), Some(longitude)) = (latitude, longitude) {
+        return Ok(BrowseOrigin {
+            latitude,
+            longitude,
+            radius: radius_override.unwrap_or(DEFAULT_BROWSE_RADIUS),
+        });
+    }
+    if let Some(mut origin) = ctx
+        .data()
+        .browse_origins
+        .read()
+        .await
+        .get(&ctx.channel_id())
+        .copied()
+    {
+        if let Some(radius) = radius_override {
+            origin.radius = radius;
+        }
+        return Ok(origin);
+    }
+    let location = ctx
+        .data()
+        .watches
+        .read()
+        .await
+        .get(&ctx.channel_id())
+        .and_then(|channel_watches| {
+            channel_watches.iter().find_map(|w| match &w.details {
+                WatchDetails::Location {
+                    latitude,
+                    longitude,
+                    radius,
+                    ..
+                } => Some(BrowseOrigin {
+                    latitude: *latitude,
+                    longitude: *longitude,
+                    radius: *radius,
+                }),
+                _ => None,
+            })
+        });
+    if let Some(mut origin) = location {
+        if let Some(radius) = radius_override {
+            origin.radius = radius;
+        }
+        return Ok(origin);
+    }
+    anyhow::bail!("Could not determine an area for this action.");
 }
